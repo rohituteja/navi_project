@@ -187,19 +187,127 @@ async def get_job_status(job_id: str):
         raise HTTPException(status_code=404, detail="Job not found")
     return jobs[job_id]
 
-@router.get("/cache/status")
-async def get_cache_status():
-    """Check if cached transcript exists"""
-    project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-    cached_transcript_path = os.path.join(project_root, "cached_transcript.json")
+
+
+@router.post("/analyze")
+async def analyze_flight(job_id: str = Form(...)):
+    """
+    Performs full flight analysis:
+    1. Parse telemetry
+    2. Get transcript (from job)
+    3. Calculate alignment offset
+    4. Detect flight segments
+    5. Return comprehensive analysis
+    """
+    if job_id not in jobs:
+        raise HTTPException(status_code=404, detail="Job not found")
     
-    if os.path.exists(cached_transcript_path):
-        # Get file modification time
-        mod_time = os.path.getmtime(cached_transcript_path)
-        return {
-            "cached": True,
-            "path": cached_transcript_path,
-            "modified_timestamp": mod_time
+    job = jobs[job_id]
+    
+    if job["status"] != "done":
+        raise HTTPException(status_code=400, detail="Job must be transcribed first")
+    
+    try:
+        from app.services.telemetry import parse_telemetry
+        from app.services.alignment import calculate_offset
+        from app.services.segmentation import detect_segments
+        
+        # 1. Parse Telemetry
+        print(f"Parsing telemetry for job {job_id}...")
+        telemetry = parse_telemetry(job["telemetry_path"])
+        
+        # 2. Get Transcript
+        transcript = job.get("transcript")
+        if not transcript:
+            raise HTTPException(status_code=400, detail="No transcript available")
+        
+        # 3. Calculate Alignment
+        print(f"Calculating alignment offset...")
+        alignment = calculate_offset(transcript, telemetry)
+        
+        # 4. Detect Segments
+        print(f"Detecting flight segments...")
+        segments = detect_segments(transcript, telemetry, alignment["offset_sec"])
+        
+        # 5. Build Analysis Result
+        analysis = {
+            "job_id": job_id,
+            "telemetry": {
+                "metadata": telemetry["metadata"],
+                "data_points": len(telemetry["data"])
+            },
+            "transcript": {
+                "segment_count": len(transcript.get("segments", [])),
+                "duration": transcript.get("duration", 0)
+            },
+            "alignment": alignment,
+            "segments": segments,
+            "status": "complete"
         }
-    else:
-        return {"cached": False}
+        
+        # Store in job
+        job["analysis"] = analysis
+        
+        return analysis
+        
+    except Exception as e:
+        print(f"Analysis error: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/analysis/{job_id}")
+async def get_analysis(job_id: str):
+    """Get the analysis results for a job"""
+    if job_id not in jobs:
+        raise HTTPException(status_code=404, detail="Job not found")
+    
+    job = jobs[job_id]
+    
+    if "analysis" not in job:
+        raise HTTPException(status_code=404, detail="Analysis not yet performed. Call /analyze first.")
+    
+    return job["analysis"]
+
+@router.get("/telemetry/{job_id}")
+async def get_telemetry_data(job_id: str, segment: str = None):
+    """
+    Get telemetry data for a job, optionally filtered by segment.
+    If segment is provided, returns only data points within that segment's time range.
+    """
+    if job_id not in jobs:
+        raise HTTPException(status_code=404, detail="Job not found")
+    
+    job = jobs[job_id]
+    
+    try:
+        from app.services.telemetry import parse_telemetry
+        
+        telemetry = parse_telemetry(job["telemetry_path"])
+        
+        if segment and "analysis" in job:
+            # Filter by segment
+            segments = job["analysis"].get("segments", [])
+            target_segment = next((s for s in segments if s["name"] == segment), None)
+            
+            if target_segment:
+                start_time = target_segment["start_time"]
+                end_time = target_segment["end_time"]
+                
+                filtered_data = [
+                    d for d in telemetry["data"]
+                    if start_time <= d["time_sec"] <= end_time
+                ]
+                
+                return {
+                    "metadata": telemetry["metadata"],
+                    "segment": target_segment,
+                    "data": filtered_data
+                }
+        
+        # Return all data
+        return telemetry
+        
+    except Exception as e:
+        print(f"Telemetry retrieval error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

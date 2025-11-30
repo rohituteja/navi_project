@@ -24,9 +24,10 @@ We implemented an **asynchronous job pattern** for the analysis pipeline. Since 
 
 ### Key Features & Implementation Details
 
-1.  **Audio Normalization**: Before transcription, all audio is normalized to ensuring consistent quality and compliance with API limits.
+1.  **Audio Normalization**: Before transcription, all audio is normalized to ensure consistent quality and compliance with API limits.
 2.  **Smart Caching**: To speed up development and save on API costs, we implemented a caching layer (`cached_transcript.json`) that stores the result of the last successful transcription.
-3.  **Polling Mechanism**: The frontend implements a robust polling hook that checks job status every few seconds, handling the transition from `queued` -> `transcribing` -> `done` seamlessly.
+3.  **LLM-Based Alignment**: Uses GPT-4o-mini to intelligently align audio transcripts with telemetry data by identifying key flight events (run-ups, takeoffs) and calculating accurate time offsets.
+4.  **Aligned Data Visualization**: The primary interface displays transcript segments side-by-side with corresponding flight telemetry, making it easy to correlate what was said with what the aircraft was doing.
 
 ## Current Features
 
@@ -37,9 +38,14 @@ We implemented an **asynchronous job pattern** for the analysis pipeline. Since 
 - **AI-Powered Transcription**: 
     - Integrates with OpenAI's Whisper model for high-accuracy speech-to-text.
     - Provides timestamped segments to correlate audio with flight events.
-- **Development Caching**: Smart caching system (`cached_transcript.json`) prevents redundant API calls, saving costs and time during testing.
-- **Real-time Status**: Visual feedback on the processing pipeline (Uploading -> Queued -> Transcribing -> Complete).
-- **Transcript Viewer**: Clean, readable display of the flight transcript with timestamps.
+- **Intelligent Alignment**: 
+    - Uses LLM-based analysis to automatically synchronize audio transcript with flight telemetry.
+    - Identifies key events (run-up, takeoff) to calculate accurate time offsets.
+- **Aligned Data Viewer**: 
+    - **The hero feature** - displays transcript segments alongside corresponding telemetry data.
+    - Shows real-time flight parameters (altitude, airspeed, vertical speed, heading, pitch, roll, flaps, RPM) for each moment in the audio.
+    - Enables easy verification of audio-telemetry alignment and event correlation.
+- **Flight Segmentation**: Automatically detects and segments different phases of flight (taxi, takeoff, cruise, landing, etc.).
 
 ## Structure
 
