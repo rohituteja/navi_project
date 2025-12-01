@@ -86,6 +86,7 @@ def parse_telemetry(file_path: str) -> dict:
             ("lat", "lat"), ("lon", "lon"), 
             ("alt_msl", "alt_msl"), ("alt_agl", "alt_agl"),
             ("ias", "ias"), ("gnd_spd", "gnd_spd"), ("v_spd", "v_spd"),
+            ("vertical_speed_fpm", "v_spd"), # Alias for clarity
             ("pitch", "pitch"), ("roll", "roll"), ("heading", "heading"),
             ("flaps", "flaps"), ("rpm", "rpm")
         ]
@@ -100,6 +101,28 @@ def parse_telemetry(file_path: str) -> dict:
         # Convert to list of dicts for JSON serialization
         # Replace NaN with None or 0 for JSON safety
         ndf = ndf.replace({np.nan: None})
+
+        # Calculate derived metrics
+        # 1. Turn Rate (deg/sec)
+        # Calculate difference in heading, handling 360-0 wrap
+        ndf["heading_diff"] = ndf["heading"].diff().fillna(0)
+        # Adjust for wrap-around (e.g., 359 -> 1 should be +2, not -358)
+        ndf["heading_diff"] = ndf["heading_diff"].apply(lambda x: x - 360 if x > 180 else (x + 360 if x < -180 else x))
+        
+        # Time difference
+        ndf["time_diff"] = ndf["time_sec"].diff().fillna(1) # Avoid div by zero
+        ndf["turn_rate"] = ndf["heading_diff"] / ndf["time_diff"]
+        
+        # Smooth turn rate
+        ndf["turn_rate"] = ndf["turn_rate"].rolling(window=3, center=True).mean().fillna(0)
+
+        # 2. Is Ground
+        # Ground speed < 35 knots AND (Alt AGL < 50 OR (Alt MSL approx field elevation - hard to know field elev without config, relying on AGL))
+        # Using AGL < 50 as a proxy for now, assuming AGL is reasonably calibrated.
+        # Also check if RPM is low-ish or if we are just sitting there.
+        # But the requirement says: ground_speed < 35 knots AND alt approx field elevation
+        ndf["is_ground"] = (ndf["gnd_spd"] < 35) & (ndf["alt_agl"] < 50)
+
         
         result = {
             "metadata": {

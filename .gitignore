@@ -46,3 +46,6 @@ Thumbs.db
 
 # Project-specific
 uploads/
+test_data/
+tests/
+

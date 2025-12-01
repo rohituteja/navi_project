@@ -26,7 +26,8 @@ class JobStatus(BaseModel):
 @router.post("/upload")
 async def upload_files(
     telemetry_file: UploadFile = File(...),
-    audio_file: Optional[UploadFile] = File(None)
+    audio_file: Optional[UploadFile] = File(None),
+    plane_type: str = Form("Sling Next Generation Trainer (NGT)")
 ):
     job_id = str(uuid.uuid4())
     
@@ -52,7 +53,8 @@ async def upload_files(
     jobs[job_id] = {
         "status": "queued",
         "telemetry_path": telemetry_path,
-        "audio_path": audio_path
+        "audio_path": audio_path,
+        "plane_type": plane_type
     }
     
     return {"job_id": job_id, "status": "queued"}
@@ -227,7 +229,8 @@ async def analyze_flight(job_id: str = Form(...)):
         
         # 4. Detect Segments
         print(f"Detecting flight segments...")
-        segments = detect_segments(transcript, telemetry, alignment["offset_sec"])
+        plane_type = job.get("plane_type", "Unknown")
+        segments = detect_segments(transcript, telemetry, alignment["offset_sec"], plane_type)
         
         # 5. Build Analysis Result
         analysis = {

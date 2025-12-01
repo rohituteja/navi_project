@@ -112,6 +112,7 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [analysis, setAnalysis] = useState(null);
   const [telemetryData, setTelemetryData] = useState(null);
+  const [planeType, setPlaneType] = useState('Sling Next Generation Trainer (NGT)');
 
   const formatTimestamp = (seconds) => {
     const mins = Math.floor(seconds / 60);
@@ -157,6 +158,7 @@ function App() {
 
     const formData = new FormData();
     formData.append('telemetry_file', telemetryFile);
+    formData.append('plane_type', planeType);
     if (audioFile) {
       formData.append('audio_file', audioFile);
     }
@@ -281,6 +283,16 @@ function App() {
               accept=".mp3,.wav,.m4a"
               onChange={(e) => handleFileChange(e, 'audio')}
             />
+          </div>
+          <div className="form-group">
+            <label>Plane Type</label>
+            <select
+              value={planeType}
+              onChange={(e) => setPlaneType(e.target.value)}
+              className="plane-select"
+            >
+              <option value="Sling Next Generation Trainer (NGT)">Sling Next Generation Trainer (NGT)</option>
+            </select>
           </div>
           <button onClick={handleUpload} disabled={loading || !telemetryFile}>
             {loading ? 'Processing...' : 'Analyze Flight'}
