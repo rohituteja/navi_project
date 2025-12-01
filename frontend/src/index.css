@@ -441,3 +441,128 @@ button:disabled {
   padding: 1.5rem;
   margin: 0;
 }
+
+/* Flight Debrief Card */
+.debrief-card {
+  background-color: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 1.5rem;
+  margin-bottom: 2rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  border-left: 5px solid #007bff;
+}
+
+.debrief-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: #666;
+  padding: 1rem;
+}
+
+.spinner {
+  border: 3px solid #f3f3f3;
+  border-top: 3px solid #007bff;
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  animation: spin 1s linear infinite;
+  margin-top: 0.5rem;
+}
+
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+.debrief-content h3 {
+  margin-top: 0;
+  color: #2c3e50;
+  font-size: 1.3rem;
+  margin-bottom: 1rem;
+}
+
+.debrief-content p {
+  font-size: 1.05rem;
+  line-height: 1.6;
+  color: #333;
+  margin-bottom: 1.5rem;
+  white-space: pre-wrap;
+}
+
+.debrief-meta {
+  display: flex;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+  color: #777;
+  border-top: 1px solid #eee;
+  padding-top: 1rem;
+}
+
+/* Segment Debrief */
+.segment-analyze-btn {
+  background-color: #28a745;
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  font-size: 0.9rem;
+  border-radius: 4px;
+  cursor: pointer;
+  margin-bottom: 1rem;
+  transition: background-color 0.2s;
+}
+
+.segment-analyze-btn:hover {
+  background-color: #218838;
+}
+
+.segment-analyze-btn:disabled {
+  background-color: #ccc;
+  cursor: not-allowed;
+}
+
+.segment-debrief-container {
+  background-color: #f0f8ff;
+  border: 1px solid #b8daff;
+  border-radius: 6px;
+  padding: 1rem;
+  margin-top: 1rem;
+  margin-bottom: 1rem;
+  border-left: 4px solid #28a745;
+}
+
+.segment-debrief-loading {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: #666;
+  font-style: italic;
+}
+
+.segment-debrief-loading .spinner {
+  width: 16px;
+  height: 16px;
+}
+
+.segment-debrief-text {
+  font-size: 1rem;
+  line-height: 1.5;
+  color: #333;
+  margin: 0;
+}
+
+.segment-debrief-header {
+  font-weight: 600;
+  color: #28a745;
+  margin-bottom: 0.5rem;
+  font-size: 0.95rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}

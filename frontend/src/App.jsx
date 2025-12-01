@@ -1,15 +1,44 @@
 import React, { useState } from 'react';
 import './index.css';
 
-function FlightSegmentSection({ segment, transcriptSegments, alignmentOffset, findClosestTelemetryPoint, formatTimestamp }) {
+function FlightSegmentSection({
+  segment,
+  segmentIndex,
+  transcriptSegments,
+  alignmentOffset,
+  findClosestTelemetryPoint,
+  formatTimestamp,
+  jobId,
+}) {
   const [isExpanded, setIsExpanded] = useState(false);
+  const [segmentDebrief, setSegmentDebrief] = useState(null);
+  const [debriefLoading, setDebriefLoading] = useState(false);
+
+  const handleAnalyzeSegment = async () => {
+    setDebriefLoading(true);
+    const formData = new FormData();
+    formData.append('job_id', jobId);
+    formData.append('segment_index', segmentIndex);
+
+    try {
+      const response = await fetch('http://localhost:8000/debrief/segment', {
+        method: 'POST',
+        body: formData,
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setSegmentDebrief(data.debrief);
+      }
+    } catch (err) {
+      console.error('Error fetching segment debrief:', err);
+    } finally {
+      setDebriefLoading(false);
+    }
+  };
 
   return (
     <div className="flight-segment">
-      <div
-        className="segment-header-collapsable"
-        onClick={() => setIsExpanded(!isExpanded)}
-      >
+      <div className="segment-header-collapsable" onClick={() => setIsExpanded(!isExpanded)}>
         <div className="segment-title">
           <span className="segment-icon">{isExpanded ? '▼' : '▶'}</span>
           <h3>{segment.name.replace(/_/g, ' ')}</h3>
@@ -22,6 +51,30 @@ function FlightSegmentSection({ segment, transcriptSegments, alignmentOffset, fi
 
       {isExpanded && (
         <div className="segment-content">
+          <button
+            className="segment-analyze-btn"
+            onClick={handleAnalyzeSegment}
+            disabled={debriefLoading}
+          >
+            {debriefLoading ? 'Analyzing...' : 'Analyze This Segment'}
+          </button>
+
+          {debriefLoading && (
+            <div className="segment-debrief-container">
+              <div className="segment-debrief-loading">
+                <span>Generating focused debrief...</span>
+                <div className="spinner"></div>
+              </div>
+            </div>
+          )}
+
+          {segmentDebrief && (
+            <div className="segment-debrief-container">
+              <div className="segment-debrief-header">CFI Analysis</div>
+              <p className="segment-debrief-text">{segmentDebrief}</p>
+            </div>
+          )}
+
           {transcriptSegments.length > 0 ? (
             <div className="aligned-timeline">
               {transcriptSegments.map((seg, i) => {
@@ -45,9 +98,7 @@ function FlightSegmentSection({ segment, transcriptSegments, alignmentOffset, fi
                         <div className="telemetry-grid">
                           <div className="telemetry-item">
                             <span className="label">Alt AGL:</span>
-                            <span className="value">
-                              {Math.round(telemetryPoint.alt_agl)}ft
-                            </span>
+                            <span className="value">{Math.round(telemetryPoint.alt_agl)}ft</span>
                           </div>
                           <div className="telemetry-item">
                             <span className="label">IAS:</span>
@@ -79,9 +130,7 @@ function FlightSegmentSection({ segment, transcriptSegments, alignmentOffset, fi
                           </div>
                           <div className="telemetry-item">
                             <span className="label">GS:</span>
-                            <span className="value">
-                              {Math.round(telemetryPoint.gnd_spd)}kt
-                            </span>
+                            <span className="value">{Math.round(telemetryPoint.gnd_spd)}kt</span>
                           </div>
                         </div>
                       ) : (
@@ -101,7 +150,6 @@ function FlightSegmentSection({ segment, transcriptSegments, alignmentOffset, fi
   );
 }
 
-
 function App() {
   const [telemetryFile, setTelemetryFile] = useState(null);
   const [audioFile, setAudioFile] = useState(null);
@@ -113,6 +161,8 @@ function App() {
   const [analysis, setAnalysis] = useState(null);
   const [telemetryData, setTelemetryData] = useState(null);
   const [planeType, setPlaneType] = useState('Sling Next Generation Trainer (NGT)');
+  const [debrief, setDebrief] = useState(null);
+  const [debriefLoading, setDebriefLoading] = useState(false);
 
   const formatTimestamp = (seconds) => {
     const mins = Math.floor(seconds / 60);
@@ -238,6 +288,9 @@ function App() {
 
       // Fetch full telemetry data
       fetchTelemetryData(id);
+
+      // Fetch Debrief
+      fetchDebrief(id);
     } catch (err) {
       setError(err.message);
       setStatus('An error occurred during analysis.');
@@ -255,6 +308,27 @@ function App() {
       console.log('Telemetry data loaded:', data.data.length, 'points');
     } catch (err) {
       console.error('Error fetching telemetry:', err);
+    }
+  };
+
+  const fetchDebrief = async (id) => {
+    setDebriefLoading(true);
+    const formData = new FormData();
+    formData.append('job_id', id);
+
+    try {
+      const response = await fetch('http://localhost:8000/debrief', {
+        method: 'POST',
+        body: formData,
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setDebrief(data.debrief);
+      }
+    } catch (err) {
+      console.error('Error fetching debrief:', err);
+    } finally {
+      setDebriefLoading(false);
     }
   };
 
@@ -291,7 +365,9 @@ function App() {
               onChange={(e) => setPlaneType(e.target.value)}
               className="plane-select"
             >
-              <option value="Sling Next Generation Trainer (NGT)">Sling Next Generation Trainer (NGT)</option>
+              <option value="Sling Next Generation Trainer (NGT)">
+                Sling Next Generation Trainer (NGT)
+              </option>
             </select>
           </div>
           <button onClick={handleUpload} disabled={loading || !telemetryFile}>
@@ -304,36 +380,70 @@ function App() {
         {analysis && (
           <section className="results-section">
             <h2>Flight Debrief</h2>
-            <div className="alignment-info">
-              <p>
-                <strong>Flight Duration:</strong>{' '}
-                {formatTimestamp(analysis.telemetry.metadata.duration_sec || 0)}
-                {' | '}
-                <strong>Alignment:</strong> {analysis.alignment.method}
-                (confidence: {(analysis.alignment.confidence * 100).toFixed(0)}%)
-                {analysis.alignment.offset_sec !== 0 && (
-                  <span> - Offset: {analysis.alignment.offset_sec.toFixed(1)}s</span>
-                )}
-              </p>
+            <div className="debrief-card">
+              {debriefLoading ? (
+                <div className="debrief-loading">
+                  <p>Generating CFI Debrief...</p>
+                  <div className="spinner"></div>
+                </div>
+              ) : debrief ? (
+                <div className="debrief-content">
+                  <h3>CFI Overview</h3>
+                  <p>{debrief}</p>
+                  <div className="debrief-meta">
+                    <span>
+                      Duration: {formatTimestamp(analysis.telemetry.metadata.duration_sec || 0)}
+                    </span>
+                    <span> • </span>
+                    <span>
+                      Alignment: {analysis.alignment.method} (
+                      {Math.round(analysis.alignment.confidence * 100)}%)
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <div className="alignment-info">
+                  <p>
+                    <strong>Flight Duration:</strong>{' '}
+                    {formatTimestamp(analysis.telemetry.metadata.duration_sec || 0)}
+                    {' | '}
+                    <strong>Alignment:</strong> {analysis.alignment.method}
+                    (confidence: {(analysis.alignment.confidence * 100).toFixed(0)}%)
+                    {analysis.alignment.offset_sec !== 0 && (
+                      <span> - Offset: {analysis.alignment.offset_sec.toFixed(1)}s</span>
+                    )}
+                  </p>
+                  <p style={{ marginTop: '0.5rem', fontSize: '0.9rem', color: '#666' }}>
+                    Generating flight overview...
+                  </p>
+                </div>
+              )}
             </div>
 
             <p className="help-text">
-              Click on each flight phase to expand and view the cockpit audio transcript with corresponding telemetry data.
+              Click on each flight phase to expand and view the cockpit audio transcript with
+              corresponding telemetry data.
             </p>
 
             <div className="flight-segments">
-              {(analysis.segments && analysis.segments.length > 0 ? analysis.segments : [{
-                name: "Full Flight",
-                start_time: 0,
-                end_time: analysis.telemetry.metadata.duration_sec || 0,
-                description: "Full flight duration (no segments detected)."
-              }])
+              {(analysis.segments && analysis.segments.length > 0
+                ? analysis.segments
+                : [
+                    {
+                      name: 'Full Flight',
+                      start_time: 0,
+                      end_time: analysis.telemetry.metadata.duration_sec || 0,
+                      description: 'Full flight duration (no segments detected).',
+                    },
+                  ]
+              )
                 .map((segment, segIndex) => {
                   // Find all transcript segments that fall within this flight segment
-                  const segmentTranscripts = transcript?.segments?.filter(transcriptSeg => {
-                    const flightTime = transcriptSeg.start + analysis.alignment.offset_sec;
-                    return flightTime >= segment.start_time && flightTime <= segment.end_time;
-                  }) || [];
+                  const segmentTranscripts =
+                    transcript?.segments?.filter((transcriptSeg) => {
+                      const flightTime = transcriptSeg.start + analysis.alignment.offset_sec;
+                      return flightTime >= segment.start_time && flightTime <= segment.end_time;
+                    }) || [];
 
                   return { segment, segmentTranscripts, segIndex };
                 })
@@ -343,14 +453,15 @@ function App() {
                     <FlightSegmentSection
                       key={segIndex}
                       segment={segment}
+                      segmentIndex={segIndex}
                       transcriptSegments={segmentTranscripts}
                       alignmentOffset={analysis.alignment.offset_sec}
                       findClosestTelemetryPoint={findClosestTelemetryPoint}
                       formatTimestamp={formatTimestamp}
+                      jobId={jobId}
                     />
                   );
-                })
-              }
+                })}
             </div>
           </section>
         )}

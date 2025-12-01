@@ -267,38 +267,55 @@ INPUT DATA:
 {candidate_text}
 
 TASK:
-Classify the flight into one of the following standardized phases:
-- TAXI: Ground operations before takeoff or after landing.
-- RUNUP: Engine run-up and pre-takeoff checks (High RPM on ground).
-- TAKEOFF: Takeoff roll and initial climb.
-- CLIMB: Sustained climb to altitude.
-- CRUISE: Level flight.
-- DESCENT: Sustained descent.
-- MANEUVERS: General maneuvering (if not specific).
-- SLOW_FLIGHT: Flight at minimum controllable airspeed.
-- STALL: Stall practice (High pitch, speed decay, recovery).
-- STEEP_TURN: Turns with >45 deg bank.
-- TRAFFIC_PATTERN: Operations in the airport traffic pattern (Downwind, Base, Final).
-- LANDING: Final approach and touchdown.
+Classify the flight into SPECIFIC, GRANULAR phases. Avoid overly broad labels like "STABLE_FLIGHT" or "MANEUVERS" unless truly appropriate.
+
+AVAILABLE PHASES:
+- TAXI: Ground operations before takeoff or after landing (low speed on ground).
+- RUNUP: Engine run-up and pre-takeoff checks (High RPM on ground, stationary).
+- TAKEOFF: Takeoff roll and initial climb (acceleration on ground followed by climb).
+- CLIMB: Sustained climb to altitude (positive vertical speed, increasing altitude).
+- CRUISE: Level flight at altitude (stable altitude, level flight).
+- DESCENT: Sustained descent (negative vertical speed, decreasing altitude).
+- TRAFFIC_PATTERN: Operations in the airport traffic pattern. This includes downwind, base, and final approach legs. Look for rectangular flight path at pattern altitude (~1000ft AGL) near airport.
+- LANDING: Final approach and touchdown (descent to ground level with speed reduction, ending on ground).
+- MANEUVERS: General maneuvering ONLY if it doesn't fit a specific category below.
+- SLOW_FLIGHT: Flight at minimum controllable airspeed (very low speed, high pitch).
+- STALL: Stall practice (High pitch + speed decay, followed by recovery).
+- STEEP_TURN: Turns with >45 deg bank angle.
+
+CRITICAL INSTRUCTIONS FOR GRANULARITY:
+1. **Break down ground operations**: Don't label the entire ground portion as "TAXI". Separate TAXI_OUT, RUNUP, TAXI_TO_RUNWAY, and TAXI_IN.
+2. **Identify distinct phases**: If you see ground ops → takeoff → flight → descent → landing, create SEPARATE segments for each.
+3. **Traffic Pattern Detection**: If you see a rectangular flight path at pattern altitude (~800-1200ft AGL) with turns, label it TRAFFIC_PATTERN. Audio cues: "downwind", "base", "final", "turning base".
+4. **Use audio for intent**: The transcript tells you what the pilot is doing. "Taxiing to runway" = TAXI. "Run-up complete" = RUNUP just ended.
+5. **Avoid broad labels**: Don't use "STABLE_FLIGHT" to cover taxi, takeoff, and landing. Be specific.
 
 SPECIFIC INSTRUCTIONS:
-- **Run-up**: Look for High RPM (approx 1700-2000+) while `is_ground` is True (Speed < 35). Confirm with audio ("run up", "mags", "checks").
-- **Takeoff**: High RPM + Acceleration on ground -> Climb. Audio: "Clear for takeoff", "Full power".
-- **Steep Turns**: Bank angle > 40 degrees.
-- **Stalls**: High pitch + Speed decay followed by recovery (pitch down).
-- **Landings**: Descent to ground level, speed reduction.
-- Use the Audio Transcript to understand the PILOT'S INTENT. If they say "Let's do a steep turn", and then you see high bank, that is a Steep Turn.
+- **TAXI**: Ground speed < 25 kt, on ground. Look for "taxiing", "taxi to runway".
+- **RUNUP**: High RPM (1700-2000+) while stationary (ground speed ~0). Audio: "run up", "mags", "checks".
+- **TAKEOFF**: High RPM + acceleration on ground → transition to climb. Audio: "cleared for takeoff", "full power".
+- **TRAFFIC_PATTERN**: Rectangular pattern at ~1000ft AGL. Audio: "downwind", "base", "final". Telemetry shows level flight with 90-degree turns.
+- **LANDING**: Descent to ground followed by touchdown. Speed reduction, flare. Audio: "cleared to land", "landing".
+- **STEEP_TURN**: Bank angle > 40 degrees. Audio: "steep turn".
+- **STALL**: High pitch + speed decay followed by recovery. Audio: "stall", "recovery".
 
 OUTPUT FORMAT:
-Return a JSON object with a "segments" list.
+Return a JSON object with a "segments" list. BE GRANULAR - create separate segments for each distinct phase.
 {{
   "segments": [
     {{
-      "name": "PHASE_NAME",
+      "name": "TAXI",
       "start_time": 0,
       "end_time": 120,
       "description": "Taxiing to runway 27",
       "confidence": 0.9
+    }},
+    {{
+      "name": "RUNUP",
+      "start_time": 120,
+      "end_time": 240,
+      "description": "Engine run-up and pre-takeoff checks",
+      "confidence": 0.85
     }},
     ...
   ]

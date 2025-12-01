@@ -8,6 +8,7 @@ from typing import Optional
 import pandas as pd
 from pydantic import BaseModel
 from openai import OpenAI
+from app.services.debrief import generate_debrief, generate_segment_debrief
 
 router = APIRouter()
 
@@ -314,3 +315,96 @@ async def get_telemetry_data(job_id: str, segment: str = None):
     except Exception as e:
         print(f"Telemetry retrieval error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/debrief")
+async def get_flight_debrief(job_id: str = Form(...)):
+    """
+    Generates a short CFI-style debrief for the flight.
+    """
+    if job_id not in jobs:
+        raise HTTPException(status_code=404, detail="Job not found")
+    
+    job = jobs[job_id]
+    
+    # Check if analysis is done
+    if "analysis" not in job:
+         raise HTTPException(status_code=400, detail="Analysis must be completed first")
+         
+    # Check if debrief already exists
+    if "debrief" in job:
+        return {"debrief": job["debrief"]}
+        
+    try:
+        analysis = job["analysis"]
+        transcript = job.get("transcript")
+        
+        # Load telemetry
+        from app.services.telemetry import parse_telemetry
+        telemetry = parse_telemetry(job["telemetry_path"])
+        
+        debrief = generate_debrief(
+            transcript=transcript,
+            telemetry=telemetry,
+            segments=analysis["segments"],
+            plane_type=job.get("plane_type", "Unknown")
+        )
+        
+        job["debrief"] = debrief
+        return {"debrief": debrief}
+        
+    except Exception as e:
+        print(f"Debrief error: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/debrief/segment")
+async def get_segment_debrief(job_id: str = Form(...), segment_index: int = Form(...)):
+    """
+    Generates a focused CFI-style debrief for a specific segment.
+    """
+    if job_id not in jobs:
+        raise HTTPException(status_code=404, detail="Job not found")
+    
+    job = jobs[job_id]
+    
+    # Check if analysis is done
+    if "analysis" not in job:
+        raise HTTPException(status_code=400, detail="Analysis must be completed first")
+    
+    analysis = job["analysis"]
+    segments = analysis.get("segments", [])
+    
+    if segment_index < 0 or segment_index >= len(segments):
+        raise HTTPException(status_code=400, detail="Invalid segment index")
+    
+    # Get target, previous, and next segments
+    target_segment = segments[segment_index]
+    prev_segment = segments[segment_index - 1] if segment_index > 0 else None
+    next_segment = segments[segment_index + 1] if segment_index < len(segments) - 1 else None
+    
+    try:
+        transcript = job.get("transcript")
+        
+        # Load telemetry
+        from app.services.telemetry import parse_telemetry
+        telemetry = parse_telemetry(job["telemetry_path"])
+        
+        debrief = generate_segment_debrief(
+            transcript=transcript,
+            telemetry=telemetry,
+            target_segment=target_segment,
+            prev_segment=prev_segment,
+            next_segment=next_segment,
+            plane_type=job.get("plane_type", "Unknown")
+        )
+        
+        return {"debrief": debrief}
+        
+    except Exception as e:
+        print(f"Segment debrief error: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
