@@ -197,8 +197,8 @@ function App() {
   };
 
   const handleUpload = async () => {
-    if (!telemetryFile) {
-      setError('Telemetry file is required.');
+    if (!telemetryFile || !audioFile) {
+      setError('Both telemetry and audio files are required.');
       return;
     }
 
@@ -335,46 +335,56 @@ function App() {
   return (
     <div className="container">
       <header>
-        <h1>Navi Debrief Engine</h1>
-        <p>Audio-first Flight Approach Debrief</p>
+        <h1>Navi Style AI Flight Debriefer</h1>
       </header>
 
       <main>
         <section className="upload-section">
-          <h2>1. Upload Flight Data</h2>
-          <div className="form-group">
-            <label>Telemetry (.xlsx, .csv) *</label>
-            <input
-              type="file"
-              accept=".xlsx,.csv"
-              onChange={(e) => handleFileChange(e, 'telemetry')}
-            />
+          <div
+            className="upload-header"
+            onClick={() => analysis && setAnalysis(null)}
+            style={{ cursor: analysis ? 'pointer' : 'default' }}
+          >
+            <h2>Upload Flight Data</h2>
+            {analysis && <span className="collapse-indicator">Click to upload new flight</span>}
           </div>
-          <div className="form-group">
-            <label>Cockpit Audio (.mp3, .wav) (Optional)</label>
-            <input
-              type="file"
-              accept=".mp3,.wav,.m4a"
-              onChange={(e) => handleFileChange(e, 'audio')}
-            />
-          </div>
-          <div className="form-group">
-            <label>Plane Type</label>
-            <select
-              value={planeType}
-              onChange={(e) => setPlaneType(e.target.value)}
-              className="plane-select"
-            >
-              <option value="Sling Next Generation Trainer (NGT)">
-                Sling Next Generation Trainer (NGT)
-              </option>
-            </select>
-          </div>
-          <button onClick={handleUpload} disabled={loading || !telemetryFile}>
-            {loading ? 'Processing...' : 'Analyze Flight'}
-          </button>
-          {error && <div className="error">{error}</div>}
-          {status && <div className="status-message">{status}</div>}
+          {!analysis && (
+            <>
+              <div className="form-group">
+                <label>Telemetry (.xlsx, .csv) *</label>
+                <input
+                  type="file"
+                  accept=".xlsx,.csv"
+                  onChange={(e) => handleFileChange(e, 'telemetry')}
+                />
+              </div>
+              <div className="form-group">
+                <label>Cockpit Audio (.mp3, .wav) *</label>
+                <input
+                  type="file"
+                  accept=".mp3,.wav,.m4a"
+                  onChange={(e) => handleFileChange(e, 'audio')}
+                />
+              </div>
+              <div className="form-group">
+                <label>Plane Type</label>
+                <select
+                  value={planeType}
+                  onChange={(e) => setPlaneType(e.target.value)}
+                  className="plane-select"
+                >
+                  <option value="Sling Next Generation Trainer (NGT)">
+                    Sling Next Generation Trainer (NGT)
+                  </option>
+                </select>
+              </div>
+              <button onClick={handleUpload} disabled={loading || !telemetryFile || !audioFile}>
+                {loading ? 'Processing...' : 'Analyze Flight'}
+              </button>
+              {error && <div className="error">{error}</div>}
+              {status && <div className="status-message">{status}</div>}
+            </>
+          )}
         </section>
 
         {analysis && (

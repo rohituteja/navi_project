@@ -1,9 +1,13 @@
 :root {
-  --primary-color: #007bff;
-  --bg-color: #f8f9fa;
-  --text-color: #333;
-  --card-bg: #fff;
-  --border-color: #ddd;
+  --primary-color: #a78bfa;
+  --secondary-color: #10b981;
+  --bg-color: #1a1a1f;
+  --text-color: #e5e7eb;
+  --card-bg: #25252d;
+  --border-color: #3a3a44;
+  --accent-purple: #a78bfa;
+  --accent-green: #10b981;
+  --hover-bg: #2d2d38;
 }
 
 body {
@@ -31,29 +35,32 @@ header {
 }
 
 header h1 {
-  font-size: 2.5rem;
+  font-size: 1.75rem;
   margin-bottom: 0.5rem;
-  color: #2c3e50;
+  color: var(--text-color);
+  font-weight: 600;
 }
 
 header p {
-  color: #666;
-  font-size: 1.1rem;
+  color: #9ca3af;
+  font-size: 1rem;
 }
 
 section {
   background: var(--card-bg);
   padding: 2rem;
-  border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
   margin-bottom: 2rem;
+  border: 1px solid var(--border-color);
 }
 
 h2 {
   margin-top: 0;
-  border-bottom: 2px solid var(--bg-color);
+  border-bottom: 2px solid var(--border-color);
   padding-bottom: 0.5rem;
   margin-bottom: 1.5rem;
+  color: var(--text-color);
 }
 
 .form-group {
@@ -72,50 +79,65 @@ input[type='file'] {
   padding: 0.5rem;
   border: 1px solid var(--border-color);
   border-radius: 4px;
+  background-color: var(--hover-bg);
+  color: var(--text-color);
+}
+
+select {
+  background-color: var(--hover-bg);
+  color: var(--text-color);
+  border: 1px solid var(--border-color);
+  padding: 0.5rem;
+  border-radius: 4px;
+  width: 100%;
 }
 
 button {
-  background-color: var(--primary-color);
+  background: linear-gradient(135deg, var(--accent-purple), var(--accent-green));
   color: white;
   border: none;
   padding: 0.75rem 1.5rem;
   font-size: 1rem;
-  border-radius: 4px;
+  border-radius: 8px;
   cursor: pointer;
   width: 100%;
-  transition: background-color 0.2s;
+  transition: all 0.3s;
+  font-weight: 600;
 }
 
 button:hover {
-  background-color: #0056b3;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(167, 139, 250, 0.4);
 }
 
 button:disabled {
-  background-color: #ccc;
+  background: #4a4a54;
   cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
 }
 
 .error {
-  color: #dc3545;
+  color: #fca5a5;
   margin-top: 1rem;
   padding: 0.75rem;
-  background-color: #f8d7da;
-  border-radius: 4px;
-  border-left: 4px solid #dc3545;
+  background-color: #3f1f1f;
+  border-radius: 8px;
+  border-left: 4px solid #ef4444;
 }
 
 .status-message {
-  color: #007bff;
+  color: var(--accent-green);
   margin-top: 1rem;
   padding: 0.75rem;
-  background-color: #e7f3ff;
-  border-radius: 4px;
-  border-left: 4px solid #007bff;
+  background-color: #1f3f2f;
+  border-radius: 8px;
+  border-left: 4px solid var(--accent-green);
   font-weight: 500;
 }
 
 .transcript-viewer {
-  background-color: #fff;
+  background-color: var(--card-bg);
   border: 1px solid var(--border-color);
   border-radius: 8px;
   overflow: hidden;
@@ -123,7 +145,7 @@ button:disabled {
 
 .transcript-controls {
   padding: 1rem;
-  background-color: #f8f9fa;
+  background-color: var(--hover-bg);
   border-bottom: 1px solid var(--border-color);
   display: flex;
   justify-content: space-between;
@@ -136,10 +158,12 @@ button:disabled {
   border-radius: 4px;
   width: 300px;
   font-size: 0.9rem;
+  background-color: var(--hover-bg);
+  color: var(--text-color);
 }
 
 .segment-count {
-  color: #666;
+  color: #9ca3af;
   font-size: 0.9rem;
 }
 
@@ -157,7 +181,7 @@ button:disabled {
 }
 
 .timeline-segment:hover {
-  background-color: #f8f9fa;
+  background-color: var(--hover-bg);
 }
 
 .timeline-segment:last-child {
@@ -169,11 +193,11 @@ button:disabled {
 }
 
 .alignment-info {
-  background-color: #e7f3ff;
+  background-color: #1f2f3f;
   padding: 1rem;
-  border-radius: 4px;
+  border-radius: 8px;
   margin-bottom: 1.5rem;
-  border-left: 4px solid #007bff;
+  border-left: 4px solid var(--accent-purple);
 }
 
 .alignment-info p {
@@ -187,8 +211,8 @@ button:disabled {
 }
 
 .segment-card {
-  background-color: #fff;
-  border: 2px solid #ddd;
+  background-color: var(--card-bg);
+  border: 2px solid var(--border-color);
   border-radius: 8px;
   padding: 1rem;
   cursor: pointer;
@@ -196,14 +220,14 @@ button:disabled {
 }
 
 .segment-card:hover {
-  border-color: #007bff;
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  border-color: var(--accent-purple);
+  box-shadow: 0 4px 8px rgba(167, 139, 250, 0.2);
   transform: translateY(-2px);
 }
 
 .segment-card.selected {
-  border-color: #007bff;
-  background-color: #e7f3ff;
+  border-color: var(--accent-purple);
+  background-color: var(--hover-bg);
 }
 
 .segment-header {
@@ -216,20 +240,20 @@ button:disabled {
 .segment-header h3 {
   margin: 0;
   font-size: 1.1rem;
-  color: #2c3e50;
+  color: var(--text-color);
   text-transform: capitalize;
 }
 
 .segment-time {
   font-size: 0.85rem;
-  color: #666;
+  color: #9ca3af;
   font-weight: 600;
 }
 
 .segment-description {
   margin: 0;
   font-size: 0.9rem;
-  color: #555;
+  color: #9ca3af;
   line-height: 1.4;
 }
 
@@ -243,7 +267,7 @@ button:disabled {
 }
 
 .help-text {
-  color: #666;
+  color: #9ca3af;
   font-size: 0.9rem;
   margin-bottom: 1rem;
   font-style: italic;
@@ -260,9 +284,9 @@ button:disabled {
   grid-template-columns: 1fr 1fr;
   gap: 1rem;
   padding: 1rem;
-  background-color: #f8f9fa;
-  border-radius: 4px;
-  border-left: 4px solid #007bff;
+  background-color: var(--hover-bg);
+  border-radius: 8px;
+  border-left: 4px solid var(--accent-purple);
 }
 
 .segment-audio,
@@ -276,7 +300,7 @@ button:disabled {
 .flight-timestamp {
   font-size: 0.85rem;
   font-weight: 600;
-  color: #007bff;
+  color: var(--accent-green);
 }
 
 .audio-text {
@@ -294,15 +318,15 @@ button:disabled {
   display: flex;
   flex-direction: column;
   gap: 0.2rem;
-  background-color: #fff;
+  background-color: var(--card-bg);
   padding: 0.4rem 0.6rem;
   border-radius: 3px;
-  border: 1px solid #ddd;
+  border: 1px solid var(--border-color);
 }
 
 .telemetry-item .label {
   font-size: 0.75rem;
-  color: #666;
+  color: #9ca3af;
   font-weight: 600;
   text-transform: uppercase;
 }
@@ -310,12 +334,12 @@ button:disabled {
 .telemetry-item .value {
   font-size: 0.95rem;
   font-family: 'Courier New', monospace;
-  color: #2c3e50;
+  color: var(--accent-green);
   font-weight: 700;
 }
 
 .telemetry-loading {
-  color: #999;
+  color: #6b7280;
   font-style: italic;
   padding: 1rem;
   text-align: center;
@@ -329,15 +353,15 @@ button:disabled {
 }
 
 .telemetry-data span {
-  background-color: #fff;
+  background-color: var(--card-bg);
   padding: 0.25rem 0.5rem;
   border-radius: 3px;
-  border: 1px solid #ddd;
+  border: 1px solid var(--border-color);
 }
 
 .timestamp {
   min-width: 80px;
-  color: #007bff;
+  color: var(--accent-purple);
   font-weight: 500;
   font-size: 0.9rem;
   padding-right: 1rem;
@@ -345,7 +369,7 @@ button:disabled {
 
 .segment-text {
   flex: 1;
-  color: #333;
+  color: var(--text-color);
 }
 
 /* Flight Segments - Collapsable */
@@ -356,15 +380,16 @@ button:disabled {
 }
 
 .flight-segment {
-  background-color: #fff;
-  border: 2px solid #ddd;
-  border-radius: 8px;
+  background-color: var(--card-bg);
+  border: 2px solid var(--border-color);
+  border-radius: 12px;
   overflow: hidden;
   transition: all 0.3s ease;
 }
 
 .flight-segment:hover {
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 4px 12px rgba(167, 139, 250, 0.2);
+  border-color: var(--accent-purple);
 }
 
 .segment-header-collapsable {
@@ -375,7 +400,7 @@ button:disabled {
 }
 
 .segment-header-collapsable:hover {
-  background-color: #f8f9fa;
+  background-color: var(--hover-bg);
 }
 
 .segment-title {
@@ -386,7 +411,7 @@ button:disabled {
 }
 
 .segment-icon {
-  color: #007bff;
+  color: var(--accent-purple);
   font-size: 0.9rem;
   transition: transform 0.2s;
   display: inline-block;
@@ -396,29 +421,29 @@ button:disabled {
 .segment-title h3 {
   margin: 0;
   font-size: 1.2rem;
-  color: #2c3e50;
+  color: var(--text-color);
   text-transform: capitalize;
   flex: 1;
 }
 
 .segment-title .segment-time {
   font-size: 0.9rem;
-  color: #666;
+  color: #9ca3af;
   font-weight: 600;
 }
 
 .segment-header-collapsable .segment-description {
   margin: 0;
   font-size: 0.95rem;
-  color: #555;
+  color: #9ca3af;
   line-height: 1.5;
   padding-left: 1.75rem;
 }
 
 .segment-content {
   padding: 0 1.25rem 1.25rem 1.25rem;
-  border-top: 1px solid #eee;
-  background-color: #fafbfc;
+  border-top: 1px solid var(--border-color);
+  background-color: var(--hover-bg);
   animation: slideDown 0.3s ease-out;
 }
 
@@ -435,7 +460,7 @@ button:disabled {
 }
 
 .no-transcript {
-  color: #999;
+  color: #6b7280;
   font-style: italic;
   text-align: center;
   padding: 1.5rem;
@@ -444,13 +469,13 @@ button:disabled {
 
 /* Flight Debrief Card */
 .debrief-card {
-  background-color: #fff;
-  border: 1px solid #e0e0e0;
-  border-radius: 8px;
+  background-color: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
   padding: 1.5rem;
   margin-bottom: 2rem;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-  border-left: 5px solid #007bff;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  border-left: 5px solid var(--accent-purple);
 }
 
 .debrief-loading {
@@ -458,13 +483,13 @@ button:disabled {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  color: #666;
+  color: #9ca3af;
   padding: 1rem;
 }
 
 .spinner {
-  border: 3px solid #f3f3f3;
-  border-top: 3px solid #007bff;
+  border: 3px solid var(--border-color);
+  border-top: 3px solid var(--accent-purple);
   border-radius: 50%;
   width: 24px;
   height: 24px;
@@ -484,7 +509,7 @@ button:disabled {
 
 .debrief-content h3 {
   margin-top: 0;
-  color: #2c3e50;
+  color: var(--accent-purple);
   font-size: 1.3rem;
   margin-bottom: 1rem;
 }
@@ -492,7 +517,7 @@ button:disabled {
 .debrief-content p {
   font-size: 1.05rem;
   line-height: 1.6;
-  color: #333;
+  color: var(--text-color);
   margin-bottom: 1.5rem;
   white-space: pre-wrap;
 }
@@ -501,48 +526,53 @@ button:disabled {
   display: flex;
   gap: 0.5rem;
   font-size: 0.9rem;
-  color: #777;
-  border-top: 1px solid #eee;
+  color: #9ca3af;
+  border-top: 1px solid var(--border-color);
   padding-top: 1rem;
 }
 
 /* Segment Debrief */
 .segment-analyze-btn {
-  background-color: #28a745;
+  background: linear-gradient(135deg, var(--accent-green), var(--accent-purple));
   color: white;
   border: none;
   padding: 0.5rem 1rem;
   font-size: 0.9rem;
-  border-radius: 4px;
+  border-radius: 8px;
   cursor: pointer;
   margin-bottom: 1rem;
-  transition: background-color 0.2s;
+  transition: all 0.3s;
+  font-weight: 600;
+  width: auto;
 }
 
 .segment-analyze-btn:hover {
-  background-color: #218838;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
 }
 
 .segment-analyze-btn:disabled {
-  background-color: #ccc;
+  background: #4a4a54;
   cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
 }
 
 .segment-debrief-container {
-  background-color: #f0f8ff;
-  border: 1px solid #b8daff;
-  border-radius: 6px;
+  background-color: #1f2f3f;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
   padding: 1rem;
   margin-top: 1rem;
   margin-bottom: 1rem;
-  border-left: 4px solid #28a745;
+  border-left: 4px solid var(--accent-green);
 }
 
 .segment-debrief-loading {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  color: #666;
+  color: #9ca3af;
   font-style: italic;
 }
 
@@ -554,15 +584,34 @@ button:disabled {
 .segment-debrief-text {
   font-size: 1rem;
   line-height: 1.5;
-  color: #333;
+  color: var(--text-color);
   margin: 0;
 }
 
 .segment-debrief-header {
   font-weight: 600;
-  color: #28a745;
+  color: var(--accent-green);
   margin-bottom: 0.5rem;
   font-size: 0.95rem;
   text-transform: uppercase;
   letter-spacing: 0.5px;
+}
+
+/* Upload Section Collapse */
+.upload-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  transition: all 0.2s;
+}
+
+.upload-header:hover {
+  opacity: 0.8;
+}
+
+.collapse-indicator {
+  font-size: 0.85rem;
+  color: var(--accent-purple);
+  font-style: italic;
+  font-weight: 500;
 }

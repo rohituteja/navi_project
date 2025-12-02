@@ -249,11 +249,11 @@ def create_enhanced_prompt_v2(
     prompt = f"""You are an expert flight instructor analyzing a flight training lesson. Your task is to identify and label specific flight segments for the entire flight, based on the provided telemetry and audio transcript data.
 
 OBJECTIVE:
-Create a chronological timeline of the flight phases.
+Create a chronological timeline of the flight phases using a STRICT STATE MACHINE approach.
 
 AIRCRAFT CONTEXT:
 Aircraft Type: {plane_type}
-IMPORTANT: Use your knowledge of this specific aircraft's operating parameters (V-speeds, RPM ranges, performance characteristics) to refine your segmentation. For example, if this is a Rotax-powered aircraft (like a Sling), idle and run-up RPMs might differ from a standard Lycoming/Continental engine.
+Use your knowledge of this specific aircraft's operating parameters (V-speeds, RPM ranges, performance characteristics).
 
 INPUT DATA:
 
@@ -266,56 +266,52 @@ INPUT DATA:
 3. HEURISTIC CANDIDATES (Physics-based hints):
 {candidate_text}
 
-TASK:
-Classify the flight into SPECIFIC, GRANULAR phases. Avoid overly broad labels like "STABLE_FLIGHT" or "MANEUVERS" unless truly appropriate.
+ALLOWED STATES (You MUST pick from this list ONLY):
+- PREFLIGHT: Engine start, avionics setup, initial checks. (Ground, 0 speed)
+- TAXI_OUT: Movement from ramp to run-up area. (Ground, < 25kts)
+- RUNUP: Engine run-up, mag checks, cycling prop. (Ground, 0 speed, High RPM)
+- TAXI_TO_RUNWAY: Movement from run-up area to runway threshold. (Ground, < 25kts)
+- TAKEOFF: Takeoff roll and initial climb to 500' AGL. (Ground -> Air, High RPM, Accel)
+- SUSTAINED_CLIMB: Climb from 500' AGL to Cruise Altitude or Maneuver Altitude.
+- CRUISE: Level flight for transit.
+- MANEUVERS: General category for airwork (Steep Turns, Stalls, Slow Flight, etc.). *Prefer specific maneuver names if possible, e.g., STEEP_TURNS, SLOW_FLIGHT, POWER_OFF_STALL, POWER_ON_STALL.*
+- SUSTAINED_DESCENT: Descent from altitude to traffic pattern altitude.
+- TRAFFIC_PATTERN: Operations in the airport pattern (Downwind, Base, Final). Includes any all prep for landing procedures and actions. Try and see context of what airport may be being flown into and use knowledge of its traffic pattern altitude and procedures as context.
+- LANDING: Final approach flare, touchdown, and roll-out. You can include parts of the final approach right before the landing itself as well. 
+- TAXI_IN: Taxi from runway to parking.
+- SHUTDOWN: Engine shutdown and securing.
 
-AVAILABLE PHASES:
-- TAXI: Ground operations before takeoff or after landing (low speed on ground).
-- RUNUP: Engine run-up and pre-takeoff checks (High RPM on ground, stationary).
-- TAKEOFF: Takeoff roll and initial climb (acceleration on ground followed by climb).
-- CLIMB: Sustained climb to altitude (positive vertical speed, increasing altitude).
-- CRUISE: Level flight at altitude (stable altitude, level flight).
-- DESCENT: Sustained descent (negative vertical speed, decreasing altitude).
-- TRAFFIC_PATTERN: Operations in the airport traffic pattern. This includes downwind, base, and final approach legs. Look for rectangular flight path at pattern altitude (~1000ft AGL) near airport.
-- LANDING: Final approach and touchdown (descent to ground level with speed reduction, ending on ground).
-- MANEUVERS: General maneuvering ONLY if it doesn't fit a specific category below.
-- SLOW_FLIGHT: Flight at minimum controllable airspeed (very low speed, high pitch).
-- STALL: Stall practice (High pitch + speed decay, followed by recovery).
-- STEEP_TURN: Turns with >45 deg bank angle.
+STATE TRANSITION LOGIC (Follow this flow):
+1. PREFLIGHT -> TAXI_OUT
+2. TAXI_OUT -> RUNUP, TAKEOFF
+3. RUNUP -> TAXI_TO_RUNWAY, TAKEOFF
+4. TAXI_TO_RUNWAY -> TAKEOFF
+5. TAKEOFF -> SUSTAINED_CLIMB (after 500' AGL or so)
+6. SUSTAINED_CLIMB -> CRUISE or MANEUVERS or TRAFFIC_PATTERN
+7. CRUISE <-> MANEUVERS (Can switch back and forth)
+8. CRUISE, MANEUVERS -> SUSTAINED_DESCENT, TRAFFIC_PATTERN
+9. SUSTAINED_DESCENT -> TRAFFIC_PATTERN (or directly to LANDING) or CRUISE or MANUEVERS
+10. TRAFFIC_PATTERN -> LANDING, SUSTAINED_DESCENT, SUSTAINED_CLIMB
+11. LANDING -> TAXI_IN (or TAKEOFF if Touch & Go)
+12. TAXI_IN -> SHUTDOWN, TAXI_OUT (to another TAKEOFF)
 
-CRITICAL INSTRUCTIONS FOR GRANULARITY:
-1. **Break down ground operations**: Don't label the entire ground portion as "TAXI". Separate TAXI_OUT, RUNUP, TAXI_TO_RUNWAY, and TAXI_IN.
-2. **Identify distinct phases**: If you see ground ops → takeoff → flight → descent → landing, create SEPARATE segments for each.
-3. **Traffic Pattern Detection**: If you see a rectangular flight path at pattern altitude (~800-1200ft AGL) with turns, label it TRAFFIC_PATTERN. Audio cues: "downwind", "base", "final", "turning base".
-4. **Use audio for intent**: The transcript tells you what the pilot is doing. "Taxiing to runway" = TAXI. "Run-up complete" = RUNUP just ended.
-5. **Avoid broad labels**: Don't use "STABLE_FLIGHT" to cover taxi, takeoff, and landing. Be specific.
-
-SPECIFIC INSTRUCTIONS:
-- **TAXI**: Ground speed < 25 kt, on ground. Look for "taxiing", "taxi to runway".
-- **RUNUP**: High RPM (1700-2000+) while stationary (ground speed ~0). Audio: "run up", "mags", "checks".
-- **TAKEOFF**: High RPM + acceleration on ground → transition to climb. Audio: "cleared for takeoff", "full power".
-- **TRAFFIC_PATTERN**: Rectangular pattern at ~1000ft AGL. Audio: "downwind", "base", "final". Telemetry shows level flight with 90-degree turns.
-- **LANDING**: Descent to ground followed by touchdown. Speed reduction, flare. Audio: "cleared to land", "landing".
-- **STEEP_TURN**: Bank angle > 40 degrees. Audio: "steep turn".
-- **STALL**: High pitch + speed decay followed by recovery. Audio: "stall", "recovery".
+CRITICAL RULES:
+1. **Granularity**: Do NOT lump all ground ops into "TAXI". You MUST distinguish between TAXI_OUT, RUNUP, and TAXI_TO_RUNWAY.
+2. **Run-up Detection**: Look for High RPM (for the model of plane) with 0 Ground Speed. Audio sample cues: "mags", "checks", "runup", "RPM".
+3. **Takeoff vs Climb**: TAKEOFF ends when the aircraft is established in a climb (approx 500' AGL). Then switch to SUSTAINED_CLIMB.
+4. **Pattern Work**: If the flight stays local, it might go TAKEOFF -> TRAFFIC_PATTERN -> TOUCH_AND_GO -> TRAFFIC_PATTERN...
+5. **Transcript is Key**: Use pilot calls ("Turning base", "Clear of runway", "Start taxi") to pinpoint transitions.
 
 OUTPUT FORMAT:
-Return a JSON object with a "segments" list. BE GRANULAR - create separate segments for each distinct phase.
+Return a JSON object with a "segments" list.
 {{
   "segments": [
     {{
-      "name": "TAXI",
+      "name": "PREFLIGHT",
       "start_time": 0,
-      "end_time": 120,
-      "description": "Taxiing to runway 27",
-      "confidence": 0.9
-    }},
-    {{
-      "name": "RUNUP",
-      "start_time": 120,
-      "end_time": 240,
-      "description": "Engine run-up and pre-takeoff checks",
-      "confidence": 0.85
+      "end_time": 45,
+      "description": "Engine start and avionics setup",
+      "confidence": 0.95
     }},
     ...
   ]

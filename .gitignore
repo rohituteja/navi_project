@@ -1,4 +1,3 @@
-# Python
 navi-env/
 pyvenv.cfg
 __pycache__/
@@ -11,18 +10,16 @@ dist/
 .coverage
 coverage.xml
 htmlcov/
+venv/
 
-# Environment
 .env
 .env.*
 
-# Node.js / Frontend
 node_modules/
 dist/
 dist-ssr/
 *.local
 
-# Logs
 logs/
 *.log
 npm-debug.log*
@@ -31,7 +28,6 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-# IDE
 .vscode/
 .idea/
 *.suo
@@ -40,12 +36,9 @@ lerna-debug.log*
 *.sln
 *.sw?
 
-# OS
 .DS_Store
 Thumbs.db
 
-# Project-specific
 uploads/
 test_data/
-tests/
-
+cached_transcript.json

@@ -1,6 +1,6 @@
 import shutil
 import uuid
-import subprocess
+
 import json
 import os
 from fastapi import APIRouter, UploadFile, File, HTTPException, Form
@@ -61,25 +61,7 @@ async def upload_files(
     return {"job_id": job_id, "status": "queued"}
     
 
-def normalize_audio(input_path: str, output_path: str):
-    """
-    Normalize audio to 16kHz mono MP3 using ffmpeg.
-    Using MP3 to stay under OpenAI's 25MB file size limit (WAV files are too large).
-    """
-    command = [
-        "ffmpeg",
-        "-y", # Overwrite output file
-        "-i", input_path,
-        "-ac", "1", # Mono
-        "-ar", "16000", # 16kHz
-        "-b:a", "64k", # 64kbps bitrate for MP3 (good quality for speech)
-        output_path
-    ]
-    try:
-        subprocess.run(command, check=True, capture_output=True)
-    except subprocess.CalledProcessError as e:
-        print(f"FFmpeg error: {e.stderr.decode()}")
-        raise HTTPException(status_code=500, detail="Audio normalization failed")
+
 
 @router.post("/transcribe")
 async def transcribe_audio(job_id: str = Form(...)):
@@ -111,15 +93,18 @@ async def transcribe_audio(job_id: str = Form(...)):
                 print(f"Original audio file size: {original_size / (1024*1024):.2f} MB")
                 
                 if original_size <= max_size:
-                    # Use original file directly - no need to normalize
+                    # Use original file directly
                     print(f"File is under 25MB, using original audio")
                     audio_path_to_send = job["audio_path"]
                 else:
-                    # File too large, normalize to compressed MP3
-                    print(f"File exceeds 25MB, normalizing to compressed MP3")
-                    normalized_path = os.path.join(UPLOAD_DIR, f"{job_id}_normalized.mp3")
-                    normalize_audio(job["audio_path"], normalized_path)
-                    audio_path_to_send = normalized_path
+                    # File too large, but we removed normalization support
+                    # For this specific project scope, we assume files are small enough or pre-processed
+                    print(f"File exceeds 25MB. Normalization is disabled in this simplified version.")
+                    # We'll try to send it anyway, but it might fail if OpenAI rejects it.
+                    # Alternatively, we could raise an error here.
+                    # Given the user requirement "the only audio file being used here will be a 20mb mp3 file",
+                    # we can assume this path won't be hit or we can just proceed.
+                    audio_path_to_send = job["audio_path"]
                 
                 # Call OpenAI Whisper API using official SDK
                 api_key = os.environ.get("OPENAI_API_KEY")
@@ -152,11 +137,7 @@ async def transcribe_audio(job_id: str = Form(...)):
                     json.dump(transcript, f, indent=2)
                 print(f"Saved transcript to cache: {cached_transcript_path}")
                 
-                # Clean up normalized file if we created one
-                if original_size > max_size:
-                    normalized_path = os.path.join(UPLOAD_DIR, f"{job_id}_normalized.mp3")
-                    if os.path.exists(normalized_path):
-                        os.remove(normalized_path)
+
                 
                 job["used_cache"] = False
                 job["message"] = "Generated new transcript and cached it"

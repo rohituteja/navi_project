@@ -16,66 +16,47 @@ def parse_telemetry(file_path: str) -> dict:
         # Standardize column names (remove whitespace)
         df.columns = df.columns.str.strip()
         
-        # Required columns mapping
-        # Map internal schema keys to possible CSV/Excel column names
+        # Required columns mapping for Garmin G3X
         column_map = {
-            "timestamp_date": ["LclDate", "Date"],
-            "timestamp_time": ["LclTime", "Time"],
-            "lat": ["Latitude", "Lat"],
-            "lon": ["Longitude", "Lon", "Long"],
-            "alt_msl": ["AltMSL", "Alt", "Altitude"],
-            "alt_agl": ["AltAGL", "AGL"],
-            "ias": ["IAS", "Indicated Airspeed"],
-            "gnd_spd": ["GndSpd", "Ground Speed", "Speed"],
-            "v_spd": ["VSpd", "Vertical Speed", "VS"],
-            "pitch": ["Pitch"],
-            "roll": ["Roll", "Bank"],
-            "heading": ["HDG", "Heading"],
-            "flaps": ["Flaps"],
-            "rpm": ["E1RPM", "RPM", "Engine RPM"]
+            "timestamp_date": "LclDate",
+            "timestamp_time": "LclTime",
+            "lat": "Latitude",
+            "lon": "Longitude",
+            "alt_msl": "AltMSL",
+            "alt_agl": "AGL",
+            "ias": "IAS",
+            "gnd_spd": "GndSpd",
+            "v_spd": "VSpd",
+            "pitch": "Pitch",
+            "roll": "Roll",
+            "heading": "HDG",
+            "flaps": "Flaps",
+            "rpm": "E1RPM"
         }
         
-        # Helper to find column
-        def get_col(keys):
-            for k in keys:
-                if k in df.columns:
-                    return k
-            return None
-
         # Create normalized dataframe
         ndf = pd.DataFrame()
         
         # Parse Timestamp
-        date_col = get_col(column_map["timestamp_date"])
-        time_col = get_col(column_map["timestamp_time"])
-        
-        if date_col and time_col:
-            # Combine Date and Time columns
-            # Assuming format is standard, but might need robust parsing
-            # For now, let's try to convert to string and combine
+        # Combine Date and Time columns
+        def combine_datetime(row):
+            d = row[column_map["timestamp_date"]]
+            t = row[column_map["timestamp_time"]]
             
-            # Function to combine date and time objects/strings
-            def combine_datetime(row):
-                d = row[date_col]
-                t = row[time_col]
+            # Handle various formats (string vs datetime objects)
+            if isinstance(d, str):
+                d_str = d
+            else:
+                d_str = d.strftime("%Y-%m-%d")
                 
-                # Handle various formats (string vs datetime objects)
-                if isinstance(d, str):
-                    d_str = d
-                else:
-                    d_str = d.strftime("%Y-%m-%d")
-                    
-                if isinstance(t, str):
-                    t_str = t
-                else:
-                    t_str = t.strftime("%H:%M:%S")
-                    
-                return pd.to_datetime(f"{d_str} {t_str}")
+            if isinstance(t, str):
+                t_str = t
+            else:
+                t_str = t.strftime("%H:%M:%S")
+                
+            return pd.to_datetime(f"{d_str} {t_str}")
 
-            ndf["timestamp"] = df.apply(combine_datetime, axis=1)
-        else:
-            # Fallback: Generate relative time if no timestamp
-            ndf["timestamp"] = pd.date_range(start=datetime.now(), periods=len(df), freq="1S")
+        ndf["timestamp"] = df.apply(combine_datetime, axis=1)
 
         # Calculate relative time in seconds
         start_time = ndf["timestamp"].iloc[0]
@@ -92,8 +73,8 @@ def parse_telemetry(file_path: str) -> dict:
         ]
         
         for schema_key, map_key in mappings:
-            col_name = get_col(column_map[map_key])
-            if col_name:
+            col_name = column_map[map_key]
+            if col_name in df.columns:
                 ndf[schema_key] = pd.to_numeric(df[col_name], errors='coerce').fillna(0)
             else:
                 ndf[schema_key] = 0.0 # Default to 0 if missing
