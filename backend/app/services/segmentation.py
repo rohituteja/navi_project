@@ -342,10 +342,8 @@ INPUT DATA:
 - **TAXI**: Moving on ground. Likely Taxi Out or Taxi to Runway.
 
 ALLOWED STATES (You MUST pick from this list ONLY):
-- PREFLIGHT: Engine start, avionics setup, initial checks. (Ground, 0 speed)
-- TAXI_OUT: Movement from ramp to run-up area. (Ground, < 25kts)
+- TAXI (TAXI TO RUNWAY, TAXI TO SHUTDOWN): Movement from on the ground, before takeoff and run up, after landing, and in between landings and takeoff. (Ground, < 25kts)
 - RUNUP: Engine run-up, mag checks, cycling prop. (Ground, 0 speed, High RPM)
-- TAXI_TO_RUNWAY: Movement from run-up area to runway threshold. (Ground, < 25kts)
 - TAKEOFF: Takeoff roll and initial climb to 500' AGL. (Ground -> Air, High RPM, Accel)
 - SUSTAINED_CLIMB: Climb from 500' AGL to Cruise Altitude or Maneuver Altitude.
 - CRUISE: Level flight for transit.
@@ -353,43 +351,40 @@ ALLOWED STATES (You MUST pick from this list ONLY):
 - SUSTAINED_DESCENT: Descent from altitude to traffic pattern altitude.
 - TRAFFIC_PATTERN: Operations in the airport pattern (Downwind, Base, Final). Includes any all prep for landing procedures and actions. Try and see context of what airport may be being flown into and use knowledge of its traffic pattern altitude and procedures as context.
 - LANDING: Final approach flare, touchdown, and roll-out. You can include parts of the final approach right before the landing itself as well. 
-- TAXI_IN: Taxi from runway to parking.
 - SHUTDOWN: Engine shutdown and securing.
 
 STATE TRANSITION LOGIC (Follow this flow):
-1. PREFLIGHT -> TAXI_OUT
-2. TAXI_OUT -> RUNUP, TAKEOFF
-3. RUNUP -> TAXI_TO_RUNWAY, TAKEOFF
-4. TAXI_TO_RUNWAY -> TAKEOFF
-5. TAKEOFF -> SUSTAINED_CLIMB (after 500' AGL or so)
-6. SUSTAINED_CLIMB -> CRUISE or MANEUVERS or TRAFFIC_PATTERN
-7. CRUISE <-> MANEUVERS (Can switch back and forth)
-8. CRUISE, MANEUVERS -> SUSTAINED_DESCENT, TRAFFIC_PATTERN
-9. SUSTAINED_DESCENT -> TRAFFIC_PATTERN (or directly to LANDING) or CRUISE or MANUEVERS
-10. TRAFFIC_PATTERN -> LANDING, SUSTAINED_DESCENT, SUSTAINED_CLIMB
-11. LANDING -> TAXI_IN (or TAKEOFF if Touch & Go)
-12. TAXI_IN -> SHUTDOWN, TAXI_OUT (to another TAKEOFF)
+1. TAXI -> RUNUP, TAKEOFF, SHUTDOWN
+2. RUNUP -> TAXI, TAKEOFF
+3. TAKEOFF -> SUSTAINED_CLIMB (after 500' AGL or so) or TRAFFIC_PATTERN
+4. SUSTAINED_CLIMB -> CRUISE or MANEUVERS or TRAFFIC_PATTERN or SUSTAINED_DESCENT
+5. CRUISE <-> MANEUVERS (Can switch back and forth)
+6. CRUISE, MANEUVERS -> SUSTAINED_DESCENT, TRAFFIC_PATTERN, SUSTAINED_CLIMB
+7. SUSTAINED_DESCENT -> TRAFFIC_PATTERN (or directly to LANDING) or CRUISE or MANUEVERS or SUSTAINED_CLIMB
+8. TRAFFIC_PATTERN -> LANDING, SUSTAINED_DESCENT, SUSTAINED_CLIMB, CRUISE
+9. LANDING -> TAXI_IN, TAKEOFF (if Touch & Go)
 
 CRITICAL RULES:
-1. **Granularity**: Do NOT lump all ground ops into "TAXI". You MUST distinguish between TAXI_OUT, RUNUP, and TAXI_TO_RUNWAY.
+1. **Granularity**: Do NOT lump all ground ops into "TAXI". You MUST distinguish between TAXI and RUNUP.
 2. **Run-up Detection**: Look for High RPM (for the model of plane) with 0 Ground Speed. Audio sample cues: "mags", "checks", "runup", "RPM".
 3. **Run-up Termination**: The RUNUP phase includes the high-RPM check AND the subsequent return to idle (idle check). It ends ONLY when:
    - The pilot announces "runup complete", "ready for takeoff", or calls tower.
    - OR the aircraft begins significant movement (Taxi to Runway).
-   - DO NOT end the RUNUP segment just because RPM drops; wait for the "complete" call or movement.
+   - DO NOT end the RUNUP segment just because RPM drops; wait for the "complete" call or movement. Going to idle signifies that the run up is ending soon.
 4. **Takeoff vs Climb**: TAKEOFF ends when the aircraft is established in a climb (approx 500' AGL). Then switch to SUSTAINED_CLIMB.
-5. **Pattern Work**: If the flight stays local, it might go TAKEOFF -> TRAFFIC_PATTERN -> TOUCH_AND_GO -> TRAFFIC_PATTERN...
+5. **Pattern Work**: If the flight stays local and in the pattern, it might go TAKEOFF -> SUSTAINED_CLIMB -> TRAFFIC_PATTERN -> SUSTAINED_DESCENT -> LANDING -> TAKEOFF... and back again.
 6. **Transcript is Key**: Use pilot calls ("Turning base", "Clear of runway", "Start taxi") to pinpoint transitions.
 
 OUTPUT FORMAT:
 Return a JSON object with a "segments" list.
+Example:
 {{
   "segments": [
     {{
-      "name": "PREFLIGHT",
+      "name": "TAXI",
       "start_time": 0,
       "end_time": 45,
-      "description": "Engine start and avionics setup",
+      "description": "Engine start and avionics setup, transition to runup area",
       "confidence": 0.95
     }},
     ...

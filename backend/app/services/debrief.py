@@ -85,7 +85,7 @@ A single paragraph or two short paragraphs. Plain text.
         response = client.chat.completions.create(
             model="gpt-5-mini",
             messages=[
-                {"role": "system", "content": "You are a helpful flight instructor."},
+                {"role": "system", "content": "You are a helpful flight instructor, specializing in flight analysis and debriefing."},
                 {"role": "user", "content": prompt},
             ],
         )
@@ -185,7 +185,7 @@ OBJECTIVE:
 - If relevant, note how this segment was influenced by the previous segment or how it set up the next segment.
 - Highlight what went well and what could be improved.
 - Be encouraging but professional, like a CFI debriefing a specific maneuver.
-- Keep it 2-3 sentences maximum.
+- Keep it detailed and effective, 6 sentences maximum. We want good details and analysis.
 
 DATA FOR TARGET SEGMENT:
 
