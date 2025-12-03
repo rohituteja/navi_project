@@ -138,6 +138,64 @@ PHASE_SIGNATURES = {
 # CANDIDATE GENERATOR (HEURISTIC SEGMENTATION)
 # ============================================================================
 
+def smooth_classifications(classifications, data_points, min_duration):
+    """Eliminate very short segments (likely noise)."""
+    if not classifications:
+        return []
+        
+    smoothed = classifications.copy()
+    
+    i = 0
+    while i < len(smoothed):
+        # Find run of same classification
+        start = i
+        current_class = smoothed[i]
+        
+        while i < len(smoothed) and smoothed[i] == current_class:
+            i += 1
+        
+        end = i
+        # Calculate duration
+        # Handle edge case where data_points might be shorter than classifications if something went wrong, 
+        # but they should match.
+        if start < len(data_points) and end-1 < len(data_points):
+            duration = data_points[end-1]["time_sec"] - data_points[start]["time_sec"]
+            
+            # If segment too short, merge with neighbors
+            if duration < min_duration and start > 0 and end < len(smoothed):
+                # Merge with longer neighbor or just previous?
+                # Simple approach: merge with previous
+                prev_class = smoothed[start - 1] if start > 0 else None
+                next_class = smoothed[end] if end < len(smoothed) else None
+                
+                # Prefer merging with "STABLE_FLIGHT" or "TAXI" over "MANEUVER" if ambiguous?
+                # Or just use previous.
+                fill_class = prev_class or next_class
+                
+                if fill_class:
+                    for j in range(start, end):
+                        smoothed[j] = fill_class
+                    
+                    # Backtrack to re-evaluate merged section
+                    i = start 
+                    # But be careful of infinite loops if we just merged with previous and it's still short?
+                    # The previous segment grows, so it should be fine.
+                    # To be safe, we can just continue and let the next pass (if we did multiple) handle it,
+                    # or just accept it grows.
+                    # Actually, if we merge with previous, we should re-check from start of previous?
+                    # For simplicity, let's just continue, as we are iterating forward.
+                    # If we merge with previous, the current block becomes previous class.
+                    # The loop continues from 'end' usually, but here we set i=start?
+                    # If we set i=start, we re-evaluate the now-merged block.
+                    # Since it merged with previous, it is now part of a larger block.
+                    # We need to find the start of that larger block to check its total duration?
+                    # No, let's just continue.
+                    i = end
+        else:
+            i += 1
+            
+    return smoothed
+
 def generate_candidates(telemetry: dict, profile: dict = None) -> List[Dict[str, Any]]:
     """
     Slices the flight into 'Regions of Interest' (ROI) based on physical state changes.
@@ -148,10 +206,7 @@ def generate_candidates(telemetry: dict, profile: dict = None) -> List[Dict[str,
 
     candidates = []
     
-    # We will iterate through the data and look for state changes
-    # To keep it simple and robust, we'll classify each point and then merge consecutive points
-    
-    # Extract thresholds from profile (do this once, not per point)
+    # Extract thresholds from profile
     high_rpm_threshold = 1700
     steep_turn_roll_min = 30
     
@@ -160,7 +215,6 @@ def generate_candidates(telemetry: dict, profile: dict = None) -> List[Dict[str,
         maneuvers = profile.get("maneuver_thresholds", {})
         
         if "idle_taxi" in rpm_profiles:
-            # Anything above idle/taxi max is "high" for ground ops
             high_rpm_threshold = rpm_profiles["idle_taxi"][1]
         
         if "steep_turn_roll_min" in maneuvers:
@@ -169,48 +223,48 @@ def generate_candidates(telemetry: dict, profile: dict = None) -> List[Dict[str,
     # 1. Point-wise classification
     point_classifications = []
     for i, p in enumerate(data_points):
-        # Default to unknown
         label = "UNKNOWN"
-        
-        # Ground vs Air
         is_ground = p.get("is_ground", False)
         
         if is_ground:
-            # Ground Logic
             if p.get("rpm", 0) > high_rpm_threshold:
-                label = "GROUND_HIGH_RPM" # Potential Runup or Takeoff Roll
+                label = "GROUND_HIGH_RPM" 
+            elif p.get("gnd_spd", 0) > 3: # Moving > 3kts
+                label = "TAXI"
             else:
-                label = "TAXI_OR_STATIONARY"
+                label = "STATIONARY"
         else:
-            # Air Logic
             roll_abs = abs(p.get("roll", 0))
             pitch_abs = abs(p.get("pitch", 0))
             v_spd = p.get("v_spd", 0)
             
             if roll_abs > steep_turn_roll_min:
-                label = "MANEUVER_HIGH_BANK" # Steep turns
-            elif pitch_abs > 15: # Arbitrary threshold for high pitch
+                label = "MANEUVER_HIGH_BANK"
+            elif pitch_abs > 15:
                 label = "MANEUVER_HIGH_PITCH"
             elif v_spd > 500:
                 label = "CLIMB"
             elif v_spd < -500:
                 label = "DESCENT"
             else:
-                label = "STABLE_FLIGHT" # Cruise or gentle maneuvering
+                label = "STABLE_FLIGHT"
                 
         point_classifications.append(label)
         
-    # 2. Merge consecutive identical labels
-    if not point_classifications:
+    # 2. Temporal Smoothing
+    MIN_SEGMENT_DURATION = 5 # seconds
+    smoothed = smooth_classifications(point_classifications, data_points, MIN_SEGMENT_DURATION)
+    
+    # 3. Merge consecutive identical labels
+    if not smoothed:
         return []
         
-    current_label = point_classifications[0]
+    current_label = smoothed[0]
     start_idx = 0
     
-    for i in range(1, len(point_classifications)):
-        label = point_classifications[i]
+    for i in range(1, len(smoothed)):
+        label = smoothed[i]
         if label != current_label:
-            # End of segment
             end_idx = i - 1
             candidates.append({
                 "name": current_label,
@@ -230,11 +284,6 @@ def generate_candidates(telemetry: dict, profile: dict = None) -> List[Dict[str,
         "start_idx": start_idx,
         "end_idx": len(data_points) - 1
     })
-    
-    # 3. Filter short noise (e.g. < 5 seconds) unless it's critical
-    # Merging short segments into neighbors could be complex, for now just keeping them
-    # but maybe filtering extremely short ones if they are just noise.
-    # Let's keep them all for the LLM to decide, but maybe label them as "transient"
     
     return candidates
 
@@ -287,6 +336,10 @@ INPUT DATA:
 
 3. HEURISTIC CANDIDATES (Physics-based hints):
 {candidate_text}
+*Hints:*
+- **GROUND_HIGH_RPM**: Likely the main Run-up mag check.
+- **STATIONARY**: Could be Preflight, or the "Idle Check" phase of Run-up (if it follows High RPM).
+- **TAXI**: Moving on ground. Likely Taxi Out or Taxi to Runway.
 
 ALLOWED STATES (You MUST pick from this list ONLY):
 - PREFLIGHT: Engine start, avionics setup, initial checks. (Ground, 0 speed)
@@ -320,9 +373,13 @@ STATE TRANSITION LOGIC (Follow this flow):
 CRITICAL RULES:
 1. **Granularity**: Do NOT lump all ground ops into "TAXI". You MUST distinguish between TAXI_OUT, RUNUP, and TAXI_TO_RUNWAY.
 2. **Run-up Detection**: Look for High RPM (for the model of plane) with 0 Ground Speed. Audio sample cues: "mags", "checks", "runup", "RPM".
-3. **Takeoff vs Climb**: TAKEOFF ends when the aircraft is established in a climb (approx 500' AGL). Then switch to SUSTAINED_CLIMB.
-4. **Pattern Work**: If the flight stays local, it might go TAKEOFF -> TRAFFIC_PATTERN -> TOUCH_AND_GO -> TRAFFIC_PATTERN...
-5. **Transcript is Key**: Use pilot calls ("Turning base", "Clear of runway", "Start taxi") to pinpoint transitions.
+3. **Run-up Termination**: The RUNUP phase includes the high-RPM check AND the subsequent return to idle (idle check). It ends ONLY when:
+   - The pilot announces "runup complete", "ready for takeoff", or calls tower.
+   - OR the aircraft begins significant movement (Taxi to Runway).
+   - DO NOT end the RUNUP segment just because RPM drops; wait for the "complete" call or movement.
+4. **Takeoff vs Climb**: TAKEOFF ends when the aircraft is established in a climb (approx 500' AGL). Then switch to SUSTAINED_CLIMB.
+5. **Pattern Work**: If the flight stays local, it might go TAKEOFF -> TRAFFIC_PATTERN -> TOUCH_AND_GO -> TRAFFIC_PATTERN...
+6. **Transcript is Key**: Use pilot calls ("Turning base", "Clear of runway", "Start taxi") to pinpoint transitions.
 
 OUTPUT FORMAT:
 Return a JSON object with a "segments" list.
@@ -342,14 +399,74 @@ Return a JSON object with a "segments" list.
     return prompt
 
 
-def detect_segments(
+def identify_key_events_llm(transcript_text, telemetry_summary, plane_type, profile):
+    """Ask LLM to identify ONLY major events: engine start, takeoff, landing, shutdown."""
+    api_key = os.environ.get("OPENAI_API_KEY")
+    if not api_key:
+        return []
+        
+    client = OpenAI(api_key=api_key)
+    
+    prompt = f"""Identify ONLY these major flight events:
+- Engine Start
+- Takeoff (wheels leave ground)
+- Landing (touchdown)
+- Engine Shutdown
+
+For each event, provide:
+1. Event name
+2. Approximate time (±10 seconds is fine)
+3. Evidence from transcript and telemetry
+
+Do NOT try to identify every segment. Just these 4 key events. Multiple takeoffs and landings may be present through the flight. Shutdown will happen only at the end after the final landing.
+
+INPUT DATA:
+Telemetry Summary:
+{telemetry_summary}
+
+Transcript:
+{transcript_text}
+
+OUTPUT JSON:
+{{
+  "events": [
+    {{ "name": "TAKEOFF", "time": 120, "evidence": "Speed > 50kts, climbing" }},
+    ...
+  ]
+}}
+"""
+    try:
+        response = client.chat.completions.create(
+            model="gpt-5-mini",
+            messages=[
+                {"role": "system", "content": "You are a flight data expert. Output JSON only."},
+                {"role": "user", "content": prompt}
+            ],
+            response_format={"type": "json_object"}
+        )
+        result = json.loads(response.choices[0].message.content)
+        return result.get("events", [])
+    except Exception as e:
+        print(f"Key event detection error: {e}")
+        return []
+
+def fill_segments_between_events(key_events, candidates, total_duration):
+    """
+    Use heuristics (candidates) to fill in the gaps between key events.
+    This is a simplified version - in reality we might want more complex logic.
+    For now, we will just pass the key events to the next stage LLM as "Anchors".
+    """
+    # We can just return the candidates, but maybe annotate them if they overlap with key events?
+    return candidates
+
+def detect_segments_v2(
     transcript: dict, telemetry: dict, offset_sec: float = 0, plane_type: str = "Unknown", profile: dict = None
 ) -> List[Dict[str, Any]]:
     """
-    Main entry point for Sensor Fusion segmentation.
+    Two-Stage LLM Approach for Segmentation.
     """
     print("\n" + "=" * 60)
-    print("SENSOR FUSION FLIGHT SEGMENTATION")
+    print("SENSOR FUSION FLIGHT SEGMENTATION V2")
     print("=" * 60)
     print(f"✈️  Aircraft: {plane_type}")
 
@@ -368,13 +485,10 @@ def detect_segments(
 
     # 3. Prepare Context for LLM
     # Telemetry Summary
-    # Create a summarized version of telemetry for the prompt
-    # We'll sample every 10 seconds or so, plus key events
     telemetry_summary_lines = []
     step = 10
     for i in range(0, len(data_points), step):
         p = data_points[i]
-        # Format: T=100s Alt=2000 Spd=80 RPM=2300 Bank=10
         line = (f"T={int(p['time_sec'])}s "
                 f"Alt={int(p['alt_agl'])} "
                 f"Spd={int(p['ias'])} "
@@ -395,19 +509,31 @@ def detect_segments(
             t_end = int(seg["end"] + offset_sec)
             transcript_text += f"[{t_start}-{t_end}s]: {seg['text']}\n"
 
-    # 4. LLM Classification
-    print(f"\n🤖 LLM analyzing flight with Sensor Fusion context...")
+    # Stage 1: Identify Key Events
+    print("🤖 Stage 1: Identifying Key Events...")
+    key_events = identify_key_events_llm(transcript_text, telemetry_summary, plane_type, profile)
+    print(f"   Found {len(key_events)} key events.")
+    
+    # Stage 2: Refine Boundaries (Main Segmentation)
+    print("🤖 Stage 2: Refining Segments...")
     
     api_key = os.environ.get("OPENAI_API_KEY")
     if not api_key:
         print("⚠️  No API key, returning heuristics only")
-        return candidates # Fallback
+        return candidates
 
     try:
         client = OpenAI(api_key=api_key)
+        
+        # Add key events to prompt
+        key_events_text = json.dumps(key_events, indent=2)
+        
         prompt = create_enhanced_prompt_v2(
             telemetry_summary, transcript_text, candidates, plane_type, profile
         )
+        
+        # Inject key events into the prompt
+        prompt += f"\n\nKEY EVENTS DETECTED (Use these as anchors):\n{key_events_text}\n"
 
         response = client.chat.completions.create(
             model="gpt-5-mini",
@@ -426,10 +552,7 @@ def detect_segments(
         
         print(f"✓ LLM proposed {len(llm_segments)} segment(s)")
 
-        # Verify LLM segments
-        llm_segments = verify_llm_segments(llm_segments, telemetry)
-        
-        # Post-process: Merge and Fill Gaps
+        # Post-process
         final = post_process_segments(llm_segments, total_duration)
         
         print(f"\n✅ Total: {len(final)} segments")
@@ -439,6 +562,15 @@ def detect_segments(
     except Exception as e:
         print(f"❌ LLM error: {e}")
         return candidates
+
+def detect_segments(
+    transcript: dict, telemetry: dict, offset_sec: float = 0, plane_type: str = "Unknown", profile: dict = None
+) -> List[Dict[str, Any]]:
+    """
+    Main entry point for Sensor Fusion segmentation.
+    Delegates to V2.
+    """
+    return detect_segments_v2(transcript, telemetry, offset_sec, plane_type, profile)
 
 
 def verify_llm_segments(
@@ -475,6 +607,12 @@ def post_process_segments(segments: List[Dict[str, Any]], total_duration: int) -
                 # Combine descriptions if they are different? For now, keep the first one or longest.
                 if len(next_seg.get("description", "")) > len(current.get("description", "")):
                     current["description"] = next_seg["description"]
+                
+                # Merge confidence: take the weighted average or just max?
+                # Let's take the max to be optimistic, or average.
+                # If one has high confidence and other low, maybe the merged one is somewhere in between?
+                # Let's use max for now.
+                current["confidence"] = max(current.get("confidence", 0.0), next_seg.get("confidence", 0.0))
             else:
                 merged.append(current)
                 current = next_seg
