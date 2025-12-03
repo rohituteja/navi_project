@@ -195,6 +195,7 @@ async def analyze_flight(job_id: str = Form(...)):
         from app.services.telemetry import parse_telemetry
         from app.services.alignment import calculate_offset
         from app.services.segmentation import detect_segments
+        from app.services.profiles import get_aircraft_profile
         
         # 1. Parse Telemetry
         print(f"Parsing telemetry for job {job_id}...")
@@ -204,17 +205,23 @@ async def analyze_flight(job_id: str = Form(...)):
         transcript = job.get("transcript")
         if not transcript:
             raise HTTPException(status_code=400, detail="No transcript available")
-        
-        # 3. Calculate Alignment
-        print(f"Calculating alignment offset...")
-        alignment = calculate_offset(transcript, telemetry)
-        
-        # 4. Detect Segments
-        print(f"Detecting flight segments...")
+            
+        # 3. Load Aircraft Profile
         plane_type = job.get("plane_type", "Unknown")
-        segments = detect_segments(transcript, telemetry, alignment["offset_sec"], plane_type)
+        print(f"Loading profile for aircraft: {plane_type}")
+        profile = get_aircraft_profile(plane_type)
+        if not profile:
+            print(f"Warning: No profile found for {plane_type}, using defaults.")
         
-        # 5. Build Analysis Result
+        # 4. Calculate Alignment
+        print(f"Calculating alignment offset...")
+        alignment = calculate_offset(transcript, telemetry, profile)
+        
+        # 5. Detect Segments
+        print(f"Detecting flight segments...")
+        segments = detect_segments(transcript, telemetry, alignment["offset_sec"], plane_type, profile)
+        
+        # 6. Build Analysis Result
         analysis = {
             "job_id": job_id,
             "telemetry": {

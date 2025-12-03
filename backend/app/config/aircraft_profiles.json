@@ -1,0 +1,51 @@
+{
+    "Sling Next Generation Trainer (NGT)": {
+        "v_speeds": {
+            "v_s0": 42,
+            "v_s1": 48,
+            "v_x": 65,
+            "v_y": 72,
+            "v_app": 75,
+            "v_a": 91,
+            "v_no": 120
+        },
+        "rpm_profiles": {
+            "idle_taxi": [
+                1600,
+                2200
+            ],
+            "run_up": [
+                3800,
+                4200
+            ],
+            "approach_descent": [
+                2500,
+                3500
+            ],
+            "slow_flight": [
+                4000,
+                4800
+            ],
+            "cruise": [
+                4800,
+                5200
+            ],
+            "max_continuous_climb": [
+                5400,
+                5500
+            ]
+        },
+        "maneuver_thresholds": {
+            "ground_speed_taxi_max": 35,
+            "ground_speed_runup_max": 5,
+            "rpm_runup_min": 3500,
+            "rpm_takeoff_min": 5000,
+            "climb_vspd_min": 300,
+            "steep_turn_roll_min": 40,
+            "slow_flight_speed_max": 60,
+            "slow_flight_rpm_min": 4000,
+            "stall_rpm_max": 3000,
+            "stall_speed_decay_max": 45
+        }
+    }
+}

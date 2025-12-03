@@ -62,7 +62,7 @@ The most complex part of the system is the **Flight Segmentation Logic** (`backe
 2.  **Contextual Summary**:
     -   We generate a compressed textual summary of the flight telemetry (sampled every 10s).
     -   *Example*: `T=100s Alt=2000 Spd=80 RPM=2300 Bank=10 [AIR]`
-3.  **LLM Decision Making (using GPT-5-nano)**:
+3.  **LLM Decision Making (using GPT-5-mini)**:
     -   We feed the **Heuristic Candidates**, **Telemetry Summary**, and **Audio Transcript** into the LLM.
     -   The LLM acts as a "Flight Instructor", using the semantic cues from the audio ("Clear of runway") to refine the physical boundaries found by the heuristics.
     -   It enforces a **Strict State Machine** (e.g., `PREFLIGHT` -> `TAXI` -> `RUNUP`) to ensure logical flow between segments, with knowledge on what each state can transition to given to it.

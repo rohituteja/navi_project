@@ -83,7 +83,7 @@ A single paragraph or two short paragraphs. Plain text.
     try:
         client = OpenAI(api_key=api_key)
         response = client.chat.completions.create(
-            model="gpt-5-nano",
+            model="gpt-5-mini",
             messages=[
                 {"role": "system", "content": "You are a helpful flight instructor."},
                 {"role": "user", "content": prompt},
@@ -207,7 +207,7 @@ A brief, focused debrief (2-3 sentences). Plain text.
     try:
         client = OpenAI(api_key=api_key)
         response = client.chat.completions.create(
-            model="gpt-5-nano",
+            model="gpt-5-mini",
             messages=[
                 {"role": "system", "content": "You are a helpful flight instructor."},
                 {"role": "user", "content": prompt},

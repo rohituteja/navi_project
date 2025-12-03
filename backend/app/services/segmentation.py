@@ -138,7 +138,7 @@ PHASE_SIGNATURES = {
 # CANDIDATE GENERATOR (HEURISTIC SEGMENTATION)
 # ============================================================================
 
-def generate_candidates(telemetry: dict) -> List[Dict[str, Any]]:
+def generate_candidates(telemetry: dict, profile: dict = None) -> List[Dict[str, Any]]:
     """
     Slices the flight into 'Regions of Interest' (ROI) based on physical state changes.
     """
@@ -151,6 +151,21 @@ def generate_candidates(telemetry: dict) -> List[Dict[str, Any]]:
     # We will iterate through the data and look for state changes
     # To keep it simple and robust, we'll classify each point and then merge consecutive points
     
+    # Extract thresholds from profile (do this once, not per point)
+    high_rpm_threshold = 1700
+    steep_turn_roll_min = 30
+    
+    if profile:
+        rpm_profiles = profile.get("rpm_profiles", {})
+        maneuvers = profile.get("maneuver_thresholds", {})
+        
+        if "idle_taxi" in rpm_profiles:
+            # Anything above idle/taxi max is "high" for ground ops
+            high_rpm_threshold = rpm_profiles["idle_taxi"][1]
+        
+        if "steep_turn_roll_min" in maneuvers:
+            steep_turn_roll_min = maneuvers["steep_turn_roll_min"]
+    
     # 1. Point-wise classification
     point_classifications = []
     for i, p in enumerate(data_points):
@@ -162,7 +177,7 @@ def generate_candidates(telemetry: dict) -> List[Dict[str, Any]]:
         
         if is_ground:
             # Ground Logic
-            if p.get("rpm", 0) > 1700:
+            if p.get("rpm", 0) > high_rpm_threshold:
                 label = "GROUND_HIGH_RPM" # Potential Runup or Takeoff Roll
             else:
                 label = "TAXI_OR_STATIONARY"
@@ -172,7 +187,7 @@ def generate_candidates(telemetry: dict) -> List[Dict[str, Any]]:
             pitch_abs = abs(p.get("pitch", 0))
             v_spd = p.get("v_spd", 0)
             
-            if roll_abs > 30:
+            if roll_abs > steep_turn_roll_min:
                 label = "MANEUVER_HIGH_BANK" # Steep turns
             elif pitch_abs > 15: # Arbitrary threshold for high pitch
                 label = "MANEUVER_HIGH_PITCH"
@@ -232,6 +247,7 @@ def create_enhanced_prompt_v2(
     transcript_text: str,
     candidate_segments: List[Dict[str, Any]],
     plane_type: str = "Unknown",
+    profile: dict = None
 ) -> str:
     """
     Improved prompt with better context and clearer instructions
@@ -246,6 +262,11 @@ def create_enhanced_prompt_v2(
                     f"  - {seg['name']}: {seg['start_time']}-{seg['end_time']}s\n"
                 )
 
+    profile_text = ""
+    if profile:
+        profile_text = f"\n\nAIRCRAFT PROFILE ({plane_type}):\n"
+        profile_text += json.dumps(profile, indent=2)
+
     prompt = f"""You are an expert flight instructor analyzing a flight training lesson. Your task is to identify and label specific flight segments for the entire flight, based on the provided telemetry and audio transcript data.
 
 OBJECTIVE:
@@ -254,6 +275,7 @@ Create a chronological timeline of the flight phases using a STRICT STATE MACHIN
 AIRCRAFT CONTEXT:
 Aircraft Type: {plane_type}
 Use your knowledge of this specific aircraft's operating parameters (V-speeds, RPM ranges, performance characteristics).
+{profile_text}
 
 INPUT DATA:
 
@@ -321,7 +343,7 @@ Return a JSON object with a "segments" list.
 
 
 def detect_segments(
-    transcript: dict, telemetry: dict, offset_sec: float = 0, plane_type: str = "Unknown"
+    transcript: dict, telemetry: dict, offset_sec: float = 0, plane_type: str = "Unknown", profile: dict = None
 ) -> List[Dict[str, Any]]:
     """
     Main entry point for Sensor Fusion segmentation.
@@ -341,7 +363,7 @@ def detect_segments(
 
     # 2. Heuristic Segmentation (Candidate Generation)
     print("🔍 Running Heuristic Candidate Generator...")
-    candidates = generate_candidates(telemetry)
+    candidates = generate_candidates(telemetry, profile)
     print(f"   Found {len(candidates)} regions of interest.")
 
     # 3. Prepare Context for LLM
@@ -384,11 +406,11 @@ def detect_segments(
     try:
         client = OpenAI(api_key=api_key)
         prompt = create_enhanced_prompt_v2(
-            telemetry_summary, transcript_text, candidates, plane_type
+            telemetry_summary, transcript_text, candidates, plane_type, profile
         )
 
         response = client.chat.completions.create(
-            model="gpt-5-nano",
+            model="gpt-5-mini",
             messages=[
                 {
                     "role": "system",
