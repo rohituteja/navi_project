@@ -1,4 +1,4 @@
-# Navi Flight Debrief App
+# AI-Powered Flight Debrief Concept
 
 An audio-first flight debrief web application designed to help pilots analyze their approaches by combining flight telemetry with cockpit audio.
 
@@ -7,7 +7,6 @@ An audio-first flight debrief web application designed to help pilots analyze th
 ### Prerequisites
 - **Python 3.11+**
 - **Node.js 18+**
-
 - **OpenAI API Key**
 
 ### 1. Environment Setup
@@ -41,11 +40,11 @@ npm run dev
 The application is built on a **decoupled client-server architecture**, designed to handle the specific challenges of synchronizing multi-modal data (audio + time-series telemetry).
 
 ### High-Level Data Flow
-1.  **Ingestion**: User uploads Flight Telemetry (CSV/Excel) and Cockpit Audio (MP3/WAV).
+1.  **Ingestion**: User uploads Flight Telemetry (CSV/Excel) and Cockpit Audio (MP3/WAV) and selects the **Aircraft Profile**.
 2.  **Normalization**: Backend standardizes data formats (standard telemetry schema).
 3.  **Transcription**: OpenAI Whisper converts audio to text with timestamps.
-4.  **Multi-Pass Alignment**: The system synchronizes audio and telemetry using multiple anchor points (Run-up, Takeoff, Landing) for high precision.
-5.  **Sensor Fusion Analysis**: The core engine combines physical data with semantic audio data to segment the flight using a two-stage AI process.
+4.  **Robust Alignment**: The system synchronizes audio and telemetry using a multi-detector clustering algorithm validated by an LLM.
+5.  **Sensor Fusion Analysis**: The core engine combines physical data with semantic audio data to segment the flight using a two-stage AI process, guided by aircraft-specific performance data.
 6.  **Visualization**: Frontend renders the aligned timeline, allowing pilots to "replay" the flight.
 
 ### 🧠 The "Sensor Fusion" Engine (Backend)
@@ -56,20 +55,31 @@ The most complex part of the system is the **Flight Segmentation Logic** (`backe
 -   **Pure LLMs** are great at understanding context (e.g., Pilot says "Turning base") but struggle with precise timing and math.
 
 #### **How it works:**
-1.  **Heuristic Candidate Generation**:
-    -   We first run a fast, physics-based pass over the telemetry with temporal smoothing.
-    -   *Simple Logic*: "If RPM > 2000 and GroundSpeed < 5kts with low altitude, it's likely a RUNUP. If AGL is less than 5 feet, it's likely we are on the ground, and probably in a TAXI state. High bank angles in the air mean we are either in a turn (during a CRUISE state) or a MANUEVER state, etc."
+1.  **Aircraft-Aware Heuristics**:
+    -   We first run a fast, physics-based pass over the telemetry using **Aircraft Profiles**.
+    -   Thresholds for stalls, steep turns, and run-ups are dynamically adjusted based on the selected plane (e.g., Sling NGT vs. Cessna 172).
     -   *Result*: A list of "Regions of Interest" (ROI) with precise timestamps.
 2.  **Two-Stage LLM Analysis**:
     -   **Stage 1 (Key Events)**: The LLM first identifies major anchor events (Engine Start, Takeoff, Landing, Shutdown) to establish a global timeline.
     -   **Stage 2 (Refinement)**: We feed the **Heuristic Candidates**, **Telemetry Summary**, **Audio Transcript**, and **Key Events** into the LLM.
     -   The LLM acts as a "Flight Instructor", using the semantic cues from the audio ("Clear of runway") to refine the physical boundaries found by the heuristics.
-    -   It enforces a **Strict State Machine** (e.g., `PREFLIGHT` -> `TAXI` -> `RUNUP`) to ensure logical flow between segments.
+    -   It enforces a **Strict State Machine** (e.g., `PREFLIGHT` -> `TAXI` -> `RUNUP` -> `TAKEOFF`) to ensure logical flow between segments.
 
-### 📊 Telemetry Normalization (`telemetry.py`)
--   **Decision**: We use `pandas` to create a unified internal schema.
--   **Supported Format**: The system is optimized for Garmin G3X Excel files.
--   **Derived Metrics**: We calculate missing data like `turn_rate` or `is_ground` status on the fly to support the segmentation logic.
+### 🔗 Robust Audio-Telemetry Alignment (`alignment.py`)
+Synchronizing a separate audio recording with G3X flight logs is difficult due to clock drift and lack of common timestamps. We solved this with a **Multi-Pass Clustering Strategy**:
+
+1.  **Candidate Detection**: We run 9 specialized detectors to find potential correlation points:
+    -   `Power/RPM Changes` (e.g., "Full power" callout vs RPM spike)
+    -   `Airspeed Callouts` (e.g., "Airspeed alive" vs Speed > 0)
+    -   `Run-up Checks` (Distinctive high-RPM, zero-speed signature)
+    -   `Takeoff Roll` & `Landings`
+    -   `Steep Turns` & `Stall Warnings`
+2.  **Clustering & Voting**: These candidates are clustered to find a consensus time offset. High-confidence events (like a distinct RPM spike during run-up) are weighted more heavily.
+3.  **LLM Validation**: The proposed offset and top anchor points are sent to an LLM (GPT-5-mini) for a final sanity check to ensure physical and semantic consistency.
+
+### 📊 Telemetry & Profiles
+-   **Normalization**: We use `pandas` to create a unified internal schema from Garmin G3X Excel files.
+-   **Aircraft Profiles**: The system loads `aircraft_profiles.json` to adapt its analysis logic. This allows it to correctly identify maneuvers based on the specific performance envelope of the plane being flown.
 
 ### ⚡ Asynchronous Job Pattern
 Analyzing an hour-long flight takes time.
@@ -84,7 +94,7 @@ Analyzing an hour-long flight takes time.
 ### Backend (Python + FastAPI)
 -   **FastAPI**: Chosen for native async support (crucial for long-running AI tasks) and auto-generated OpenAPI docs.
 -   **Pandas**: The industry standard for time-series data manipulation.
-
+-   **OpenAI GPT-5-mini**: Used for high-speed, cost-effective semantic analysis and validation.
 
 ### Frontend (React + Vite)
 -   **React**: Component-based architecture suitable for complex dashboards.
@@ -98,8 +108,8 @@ navi_project/
 ├── backend/
 │   ├── app/
 │   │   ├── api/            # API Endpoints
-│   │   ├── services/       # Core Logic (Segmentation, Telemetry)
-│   │   └── main.py         # App Entry Point
+│   │   └── services/       # Core Logic (Segmentation, Alignment, Profiles)
+│   ├── main.py             # App Entry Point
 │   └── requirements.txt
 ├── frontend/
 │   ├── src/                # React Components

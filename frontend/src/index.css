@@ -531,19 +531,107 @@ button:disabled {
   padding-top: 1rem;
 }
 
+/* Upload Section Collapse */
+.upload-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  text-align: center;
+}
+
+.upload-header h2 {
+  margin-bottom: 0.5rem;
+  border-bottom: none;
+  width: 100%;
+}
+
+.upload-header:hover {
+  opacity: 0.8;
+}
+
+.collapse-indicator-container {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  margin-top: -1rem;
+  margin-bottom: 1rem;
+}
+
+.collapse-indicator {
+  font-size: 0.9rem;
+  color: var(--accent-purple);
+  font-style: italic;
+  font-weight: 500;
+  background-color: rgba(167, 139, 250, 0.1);
+  padding: 0.25rem 1rem;
+  border-radius: 20px;
+  border: 1px solid rgba(167, 139, 250, 0.3);
+}
+
+/* Analyze Button Transformation */
+.analyze-btn {
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+
+.analyze-btn.loading {
+  background: linear-gradient(135deg, #4b5563, #374151);
+  cursor: default;
+  transform: none;
+  box-shadow: none;
+}
+
+.btn-content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  width: 100%;
+}
+
+.spinner-small {
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top: 2px solid white;
+  border-radius: 50%;
+  width: 16px;
+  height: 16px;
+  animation: spin 1s linear infinite;
+}
+
+.btn-text {
+  font-weight: 500;
+  letter-spacing: 0.5px;
+}
+
+.btn-timer {
+  font-family: 'Courier New', monospace;
+  background-color: rgba(0, 0, 0, 0.2);
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  min-width: 45px;
+}
+
 /* Segment Debrief */
 .segment-analyze-btn {
   background: linear-gradient(135deg, var(--accent-green), var(--accent-purple));
   color: white;
   border: none;
-  padding: 0.5rem 1rem;
-  font-size: 0.9rem;
+  padding: 0.75rem 1.5rem;
+  font-size: 1rem;
   border-radius: 8px;
   cursor: pointer;
-  margin-bottom: 1rem;
+  margin: 1rem 0;
   transition: all 0.3s;
   font-weight: 600;
   width: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
 .segment-analyze-btn:hover {
@@ -556,62 +644,4 @@ button:disabled {
   cursor: not-allowed;
   transform: none;
   box-shadow: none;
-}
-
-.segment-debrief-container {
-  background-color: #1f2f3f;
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-  padding: 1rem;
-  margin-top: 1rem;
-  margin-bottom: 1rem;
-  border-left: 4px solid var(--accent-green);
-}
-
-.segment-debrief-loading {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  color: #9ca3af;
-  font-style: italic;
-}
-
-.segment-debrief-loading .spinner {
-  width: 16px;
-  height: 16px;
-}
-
-.segment-debrief-text {
-  font-size: 1rem;
-  line-height: 1.5;
-  color: var(--text-color);
-  margin: 0;
-}
-
-.segment-debrief-header {
-  font-weight: 600;
-  color: var(--accent-green);
-  margin-bottom: 0.5rem;
-  font-size: 0.95rem;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-/* Upload Section Collapse */
-.upload-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  transition: all 0.2s;
-}
-
-.upload-header:hover {
-  opacity: 0.8;
-}
-
-.collapse-indicator {
-  font-size: 0.85rem;
-  color: var(--accent-purple);
-  font-style: italic;
-  font-weight: 500;
 }

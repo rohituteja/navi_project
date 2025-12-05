@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import './index.css';
 
 function FlightSegmentSection({
@@ -164,6 +164,21 @@ function App() {
   const [debrief, setDebrief] = useState(null);
   const [debriefLoading, setDebriefLoading] = useState(false);
 
+  const [elapsedTime, setElapsedTime] = useState(0);
+
+  useEffect(() => {
+    let interval;
+    if (loading) {
+      setElapsedTime(0);
+      interval = setInterval(() => {
+        setElapsedTime((prev) => prev + 1);
+      }, 1000);
+    } else {
+      clearInterval(interval);
+    }
+    return () => clearInterval(interval);
+  }, [loading]);
+
   const formatTimestamp = (seconds) => {
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
@@ -258,7 +273,6 @@ function App() {
     } catch (err) {
       setError(err.message);
       setStatus('An error occurred while processing your flight data.');
-    } finally {
       setLoading(false);
     }
   };
@@ -294,6 +308,9 @@ function App() {
     } catch (err) {
       setError(err.message);
       setStatus('An error occurred during analysis.');
+      setLoading(false);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -335,7 +352,7 @@ function App() {
   return (
     <div className="container">
       <header>
-        <h1>Navi Style AI Flight Debriefer</h1>
+        <h1>AI-Powered Flight Debrief Concept</h1>
       </header>
 
       <main>
@@ -346,23 +363,27 @@ function App() {
             style={{ cursor: analysis ? 'pointer' : 'default' }}
           >
             <h2>Upload Flight Data</h2>
-            {analysis && <span className="collapse-indicator">Click to upload new flight</span>}
+            {analysis && (
+              <div className="collapse-indicator-container">
+                <span className="collapse-indicator">Click to upload new flight</span>
+              </div>
+            )}
           </div>
           {!analysis && (
             <>
               <div className="form-group">
-                <label>Telemetry (.xlsx, .csv) *</label>
+                <label>Telemetry (.xlsx) *</label>
                 <input
                   type="file"
-                  accept=".xlsx,.csv"
+                  accept=".xlsx"
                   onChange={(e) => handleFileChange(e, 'telemetry')}
                 />
               </div>
               <div className="form-group">
-                <label>Cockpit Audio (.mp3, .wav) *</label>
+                <label>Cockpit Audio (.mp3) *</label>
                 <input
                   type="file"
-                  accept=".mp3,.wav,.m4a"
+                  accept=".mp3"
                   onChange={(e) => handleFileChange(e, 'audio')}
                 />
               </div>
@@ -378,11 +399,22 @@ function App() {
                   </option>
                 </select>
               </div>
-              <button onClick={handleUpload} disabled={loading || !telemetryFile || !audioFile}>
-                {loading ? 'Processing...' : 'Analyze Flight'}
+              <button
+                onClick={handleUpload}
+                disabled={loading || !telemetryFile || !audioFile}
+                className={`analyze-btn ${loading ? 'loading' : ''}`}
+              >
+                {loading ? (
+                  <div className="btn-content">
+                    <div className="spinner-small"></div>
+                    <span className="btn-text">{status}</span>
+                    <span className="btn-timer">{formatTimestamp(elapsedTime)}</span>
+                  </div>
+                ) : (
+                  'Analyze Flight'
+                )}
               </button>
               {error && <div className="error">{error}</div>}
-              {status && <div className="status-message">{status}</div>}
             </>
           )}
         </section>
@@ -439,13 +471,13 @@ function App() {
               {(analysis.segments && analysis.segments.length > 0
                 ? analysis.segments
                 : [
-                    {
-                      name: 'Full Flight',
-                      start_time: 0,
-                      end_time: analysis.telemetry.metadata.duration_sec || 0,
-                      description: 'Full flight duration (no segments detected).',
-                    },
-                  ]
+                  {
+                    name: 'Full Flight',
+                    start_time: 0,
+                    end_time: analysis.telemetry.metadata.duration_sec || 0,
+                    description: 'Full flight duration (no segments detected).',
+                  },
+                ]
               )
                 .map((segment, segIndex) => {
                   // Find all transcript segments that fall within this flight segment

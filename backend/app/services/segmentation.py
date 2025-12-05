@@ -344,13 +344,13 @@ INPUT DATA:
 ALLOWED STATES (You MUST pick from this list ONLY):
 - TAXI (TAXI TO RUNWAY, TAXI TO SHUTDOWN): Movement from on the ground, before takeoff and run up, after landing, and in between landings and takeoff. (Ground, < 25kts)
 - RUNUP: Engine run-up, mag checks, cycling prop. (Ground, 0 speed, High RPM)
-- TAKEOFF: Takeoff roll and initial climb to 500' AGL. (Ground -> Air, High RPM, Accel)
+- TAKEOFF: Takeoff roll and initial climb to 500' AGL. (Ground -> Air, High RPM, Accel). IMPORTANT: Include ~10 seconds BEFORE liftoff (taxi onto runway, lineup) and ~10 seconds AFTER liftoff (initial climb). The segment should provide context around the takeoff event itself.
 - SUSTAINED_CLIMB: Climb from 500' AGL to Cruise Altitude or Maneuver Altitude.
 - CRUISE: Level flight for transit.
 - MANEUVERS: General category for airwork (Steep Turns, Stalls, Slow Flight, etc.). *Prefer specific maneuver names if possible, e.g., STEEP_TURNS, SLOW_FLIGHT, POWER_OFF_STALL, POWER_ON_STALL.*
 - SUSTAINED_DESCENT: Descent from altitude to traffic pattern altitude.
 - TRAFFIC_PATTERN: Operations in the airport pattern (Downwind, Base, Final). Includes any all prep for landing procedures and actions. Try and see context of what airport may be being flown into and use knowledge of its traffic pattern altitude and procedures as context.
-- LANDING: Final approach flare, touchdown, and roll-out. You can include parts of the final approach right before the landing itself as well. 
+- LANDING: Final approach flare, touchdown, and roll-out. IMPORTANT: Include ~10 seconds BEFORE touchdown (short final, flare) and ~10 seconds AFTER touchdown (roll-out, turn off runway). The segment should capture the full landing context.
 - SHUTDOWN: Engine shutdown and securing.
 
 STATE TRANSITION LOGIC (Follow this flow):
@@ -460,10 +460,8 @@ def detect_segments_v2(
     """
     Two-Stage LLM Approach for Segmentation.
     """
-    print("\n" + "=" * 60)
     print("SENSOR FUSION FLIGHT SEGMENTATION V2")
-    print("=" * 60)
-    print(f"✈️  Aircraft: {plane_type}")
+    print(f"Aircraft: {plane_type}")
 
     # 1. Data Ingestion & Pre-processing
     data_points = telemetry.get("data", [])
@@ -471,12 +469,12 @@ def detect_segments_v2(
         return []
 
     total_duration = int(data_points[-1]["time_sec"])
-    print(f"📊 Flight duration: {total_duration // 60}m {total_duration % 60}s")
+    print(f"Flight duration: {total_duration // 60}m {total_duration % 60}s")
 
     # 2. Heuristic Segmentation (Candidate Generation)
-    print("🔍 Running Heuristic Candidate Generator...")
+    print("Running Heuristic Candidate Generator...")
     candidates = generate_candidates(telemetry, profile)
-    print(f"   Found {len(candidates)} regions of interest.")
+    print(f"Found {len(candidates)} regions of interest.")
 
     # 3. Prepare Context for LLM
     # Telemetry Summary
@@ -505,16 +503,16 @@ def detect_segments_v2(
             transcript_text += f"[{t_start}-{t_end}s]: {seg['text']}\n"
 
     # Stage 1: Identify Key Events
-    print("🤖 Stage 1: Identifying Key Events...")
+    print("Stage 1: Identifying Key Events...")
     key_events = identify_key_events_llm(transcript_text, telemetry_summary, plane_type, profile)
-    print(f"   Found {len(key_events)} key events.")
+    print(f"Found {len(key_events)} key events.")
     
     # Stage 2: Refine Boundaries (Main Segmentation)
-    print("🤖 Stage 2: Refining Segments...")
+    print("Stage 2: Refining Segments...")
     
     api_key = os.environ.get("OPENAI_API_KEY")
     if not api_key:
-        print("⚠️  No API key, returning heuristics only")
+        print("No API key, returning heuristics only")
         return candidates
 
     try:
@@ -545,17 +543,19 @@ def detect_segments_v2(
         result = json.loads(response.choices[0].message.content)
         llm_segments = result.get("segments", [])
         
-        print(f"✓ LLM proposed {len(llm_segments)} segment(s)")
+        print(f"LLM proposed {len(llm_segments)} segment(s)")
 
-        # Post-process
-        final = post_process_segments(llm_segments, total_duration)
+        # Post-process: buffer critical segments, then fill gaps
+        print("Buffering critical segments (TAKEOFF, LANDING)...")
+        buffered = buffer_critical_segments(llm_segments, total_duration)
+        final = post_process_segments(buffered, total_duration)
         
-        print(f"\n✅ Total: {len(final)} segments")
+        print(f"Total: {len(final)} segments")
 
         return final
 
     except Exception as e:
-        print(f"❌ LLM error: {e}")
+        print(f"LLM error: {e}")
         return candidates
 
 def detect_segments(
@@ -577,6 +577,63 @@ def verify_llm_segments(
     """
     # TODO: Implement verification logic
     return llm_segments
+
+
+# ============================================================================
+# SEGMENT BUFFERING
+# ============================================================================
+
+BUFFER_SECONDS = 10  # Buffer to add before/after critical segments
+
+
+def buffer_critical_segments(segments: List[Dict[str, Any]], total_duration: int) -> List[Dict[str, Any]]:
+    """
+    Expands TAKEOFF and LANDING segments by stealing time from neighbors.
+    - TAKEOFF: Extend start backwards (into TAXI/RUNUP), extend end forwards (into CLIMB).
+    - LANDING: Extend start backwards (into TRAFFIC_PATTERN/DESCENT), extend end forwards (into TAXI).
+    
+    This runs BEFORE post_process_segments so that gap-filling will fix any resulting gaps.
+    """
+    if not segments:
+        return segments
+
+    # Sort first to ensure proper neighbor detection
+    sorted_segs = sorted(segments, key=lambda x: x.get("start_time", 0))
+    buffered = []
+    
+    for i, seg in enumerate(sorted_segs):
+        new_seg = seg.copy()
+        name = seg.get("name", "").upper()
+
+        if name == "TAKEOFF":
+            # Extend start backwards
+            original_start = seg["start_time"]
+            new_start = max(0, original_start - BUFFER_SECONDS)
+            new_seg["start_time"] = new_start
+            
+            # Extend end forward
+            original_end = seg["end_time"]
+            max_end = total_duration if i + 1 >= len(sorted_segs) else sorted_segs[i + 1]["end_time"] - 5
+            new_seg["end_time"] = min(original_end + BUFFER_SECONDS, max_end)
+            
+            print(f"Buffered TAKEOFF: {original_start}-{original_end}s -> {new_seg['start_time']}-{new_seg['end_time']}s")
+
+        elif name == "LANDING":
+            # Extend start backwards
+            original_start = seg["start_time"]
+            min_start = 0 if i == 0 else sorted_segs[i - 1]["start_time"] + 5
+            new_seg["start_time"] = max(min_start, original_start - BUFFER_SECONDS)
+            
+            # Extend end forward
+            original_end = seg["end_time"]
+            max_end = total_duration if i + 1 >= len(sorted_segs) else sorted_segs[i + 1]["end_time"] - 5
+            new_seg["end_time"] = min(original_end + BUFFER_SECONDS, max_end)
+            
+            print(f"Buffered LANDING: {original_start}-{original_end}s -> {new_seg['start_time']}-{new_seg['end_time']}s")
+
+        buffered.append(new_seg)
+
+    return buffered
 
 
 def post_process_segments(segments: List[Dict[str, Any]], total_duration: int) -> List[Dict[str, Any]]:
@@ -633,6 +690,12 @@ def post_process_segments(segments: List[Dict[str, Any]], total_duration: int) -
     if merged:
         merged[0]["start_time"] = 0
         merged[-1]["end_time"] = max(merged[-1]["end_time"], total_duration)
+        
+        # Validate continuity
+        for i in range(len(merged) - 1):
+            if merged[i]["end_time"] != merged[i + 1]["start_time"]:
+                print(f"Warning: Gap/overlap between {merged[i]['name']} and {merged[i + 1]['name']}")
+        print(f"Timeline validated: {merged[0]['start_time']}s to {merged[-1]['end_time']}s (continuous)")
 
     return merged
 

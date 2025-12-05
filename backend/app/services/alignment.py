@@ -534,9 +534,7 @@ def calculate_offset(transcript: dict, telemetry: dict, profile: dict = None) ->
     Main entry point for alignment.
     Orchestrates the multi-pass detection, clustering, and validation.
     """
-    print("="*60)
     print("STARTING ROBUST ALIGNMENT")
-    print("="*60)
     
     # 1. Generate Candidates
     candidates = generate_all_candidates(telemetry, transcript, profile)
@@ -553,6 +551,5 @@ def calculate_offset(transcript: dict, telemetry: dict, profile: dict = None) ->
     
     print(f"Final Offset: {final_result['offset_sec']:.1f}s")
     print(f"Reasoning: {final_result.get('reasoning')}")
-    print("="*60)
     
     return final_result

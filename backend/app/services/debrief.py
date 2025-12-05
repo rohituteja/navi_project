@@ -11,9 +11,12 @@ def generate_debrief(
     """
     Generates a short and sweet CFI-style debrief of the flight.
     """
-    print("\n" + "=" * 60)
     print("GENERATING FLIGHT DEBRIEF")
-    print("=" * 60)
+
+    def format_time(seconds):
+        m = int(seconds // 60)
+        s = int(seconds % 60)
+        return f"{m:02d}:{s:02d}"
 
     # 1. Prepare Context
     
@@ -23,7 +26,8 @@ def generate_debrief(
     step = 10 # Sample every 10 seconds
     for i in range(0, len(data_points), step):
         p = data_points[i]
-        line = (f"T={int(p['time_sec'])}s "
+        t_str = format_time(p['time_sec'])
+        line = (f"T={t_str} "
                 f"Alt={int(p['alt_agl'])} "
                 f"Spd={int(p['ias'])} "
                 f"RPM={int(p['rpm'])} "
@@ -39,12 +43,16 @@ def generate_debrief(
     transcript_text = ""
     if transcript and "segments" in transcript:
         for seg in transcript["segments"]:
-            transcript_text += f"[{int(seg['start'])}-{int(seg['end'])}s]: {seg['text']}\n"
+            start_str = format_time(seg['start'])
+            end_str = format_time(seg['end'])
+            transcript_text += f"[{start_str}-{end_str}]: {seg['text']}\n"
 
     # Segments Text
     segments_text = ""
     for seg in segments:
-        segments_text += f"- {seg['name']}: {seg['start_time']}-{seg['end_time']}s ({seg.get('description', '')})\n"
+        s_time = format_time(seg['start_time'])
+        e_time = format_time(seg['end_time'])
+        segments_text += f"- {seg['name']}: {s_time}-{e_time} ({seg.get('description', '')})\n"
 
     # 2. Construct Prompt
     prompt = f"""You are an experienced Certified Flight Instructor (CFI).
@@ -58,6 +66,7 @@ OBJECTIVE:
 - Keep it encouraging but professional.
 - The tone should be conversational, like a post-flight chat in the briefing room.
 - Do NOT list every single event. Focus on the big picture.
+- When mentioning time, ALWAYS use the format MM:SS (e.g. 05:30) used in the data.
 - If there are specific maneuvers (Steep Turns, Stalls, etc.), mention how they looked based on the data.
 
 DATA:
@@ -110,9 +119,12 @@ def generate_segment_debrief(
     Generates a focused CFI-style debrief for a specific flight segment.
     Considers previous and next segments for context.
     """
-    print(f"\n{'='*60}")
     print(f"GENERATING SEGMENT DEBRIEF: {target_segment['name']}")
-    print(f"{'='*60}")
+
+    def format_time(seconds):
+        m = int(seconds // 60)
+        s = int(seconds % 60)
+        return f"{m:02d}:{s:02d}"
 
     # 1. Filter telemetry data for the target segment and adjacent segments
     data_points = telemetry.get("data", [])
@@ -130,7 +142,8 @@ def generate_segment_debrief(
     step = max(1, len(target_telemetry) // 30)  # Sample ~30 points max
     for i in range(0, len(target_telemetry), step):
         p = target_telemetry[i]
-        line = (f"T={int(p['time_sec'])}s "
+        t_str = format_time(p['time_sec'])
+        line = (f"T={t_str} "
                 f"Alt={int(p['alt_agl'])} "
                 f"Spd={int(p['ias'])} "
                 f"RPM={int(p['rpm'])} "
@@ -149,7 +162,9 @@ def generate_segment_debrief(
         for seg in transcript["segments"]:
             seg_time = seg["start"]
             if start_time <= seg_time <= end_time:
-                transcript_text += f"[{int(seg['start'])}-{int(seg['end'])}s]: {seg['text']}\n"
+                s_str = format_time(seg['start'])
+                e_str = format_time(seg['end'])
+                transcript_text += f"[{s_str}-{e_str}]: {seg['text']}\n"
 
     # 3. Build context strings for previous and next segments
     context_info = ""
@@ -157,13 +172,13 @@ def generate_segment_debrief(
     if prev_segment:
         context_info += f"\n[PREVIOUS SEGMENT]\n"
         context_info += f"Name: {prev_segment['name']}\n"
-        context_info += f"Time: {prev_segment['start_time']}-{prev_segment['end_time']}s\n"
+        context_info += f"Time: {format_time(prev_segment['start_time'])}-{format_time(prev_segment['end_time'])}\n"
         context_info += f"Description: {prev_segment.get('description', 'N/A')}\n"
     
     if next_segment:
         context_info += f"\n[NEXT SEGMENT]\n"
         context_info += f"Name: {next_segment['name']}\n"
-        context_info += f"Time: {next_segment['start_time']}-{next_segment['end_time']}s\n"
+        context_info += f"Time: {format_time(next_segment['start_time'])}-{format_time(next_segment['end_time'])}\n"
         context_info += f"Description: {next_segment.get('description', 'N/A')}\n"
 
     # 4. Construct prompt
@@ -173,7 +188,7 @@ AIRCRAFT: {plane_type}
 
 TARGET SEGMENT:
 Name: {target_segment['name']}
-Time: {start_time}-{end_time}s
+Time: {format_time(start_time)}-{format_time(end_time)}
 Description: {target_segment.get('description', 'N/A')}
 
 ADJACENT SEGMENTS (for context):
@@ -185,6 +200,7 @@ OBJECTIVE:
 - If relevant, note how this segment was influenced by the previous segment or how it set up the next segment.
 - Highlight what went well and what could be improved.
 - Be encouraging but professional, like a CFI debriefing a specific maneuver.
+- When mentioning time, ALWAYS use the format MM:SS (e.g. 05:30).
 - Keep it detailed and effective, 6 sentences maximum. We want good details and analysis.
 
 DATA FOR TARGET SEGMENT:
