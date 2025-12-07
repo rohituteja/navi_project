@@ -1,10 +1,7 @@
-import os
-import json
 import math
 import statistics
 from collections import Counter
 from typing import List, Dict, Any, Optional, Tuple
-from openai import OpenAI
 import numpy as np
 
 # ============================================================================
@@ -440,101 +437,15 @@ def validate_offset_with_physics(offset: float, telemetry: dict, transcript: dic
     return 1.0
 
 # ============================================================================
-# 4. LLM VALIDATION
-# ============================================================================
-
-def calculate_offset_with_llm_validation(
-    proposed_offset: float, 
-    candidates: List[Dict], 
-    transcript: dict, 
-    telemetry: dict
-) -> Dict:
-    """
-    Asks LLM to validate the proposed offset using the top candidates.
-    """
-    api_key = os.environ.get("OPENAI_API_KEY")
-    if not api_key:
-        return {
-            "offset_sec": proposed_offset,
-            "confidence": 0.5,
-            "method": "clustering_no_llm",
-            "reasoning": "No API key for validation"
-        }
-        
-    client = OpenAI(api_key=api_key)
-    
-    # Prepare context
-    top_candidates = sorted(candidates, key=lambda x: x["confidence"], reverse=True)[:10]
-    candidates_text = json.dumps([{
-        "type": c["type"],
-        "telemetry_time": f"{c['telemetry_time']:.1f}s",
-        "audio_time": f"{c['audio_time']:.1f}s",
-        "implied_offset": f"{c['implied_offset']:.1f}s",
-        "description": c["description"]
-    } for c in top_candidates], indent=2)
-    
-    prompt = f"""You are validating a proposed audio-telemetry alignment offset.
-    
-PROPOSED OFFSET: {proposed_offset:.1f} seconds
-(Formula: Telemetry Time = Audio Time + Offset)
-
-TOP ANCHOR POINTS SUPPORTING THIS OFFSET:
-{candidates_text}
-
-TASK:
-1. Does this offset make logical sense? 
-2. Do the anchor points seem to agree?
-3. Are there any obvious mismatches?
-
-If the offset looks correct (anchors align well), confirm it.
-If it looks slightly off (e.g. anchors consistently off by 2s), suggest a refinement.
-If it looks completely wrong, explain why.
-
-OUTPUT JSON:
-{{
-  "validated_offset": <number>,
-  "confidence": <0.0-1.0>,
-  "reasoning": "<short explanation>"
-}}
-"""
-
-    try:
-        response = client.chat.completions.create(
-            model="gpt-5-mini",
-            messages=[
-                {"role": "system", "content": "You are a flight data expert. Output JSON only."},
-                {"role": "user", "content": prompt}
-            ],
-            response_format={"type": "json_object"}
-        )
-        result = json.loads(response.choices[0].message.content)
-        return {
-            "offset_sec": float(result.get("validated_offset", proposed_offset)),
-            "confidence": float(result.get("confidence", 0.5)),
-            "method": "multi_anchor_clustering_llm_validated",
-            "reasoning": result.get("reasoning", "LLM validated"),
-            "anchor_points": top_candidates
-        }
-    except Exception as e:
-        print(f"LLM Validation error: {e}")
-        return {
-            "offset_sec": proposed_offset,
-            "confidence": 0.5,
-            "method": "clustering_llm_failed",
-            "reasoning": f"LLM error: {e}",
-            "anchor_points": top_candidates
-        }
-
-# ============================================================================
-# 5. MAIN ENTRY POINT
+# 4. MAIN ENTRY POINT
 # ============================================================================
 
 def calculate_offset(transcript: dict, telemetry: dict, profile: dict = None) -> dict:
     """
     Main entry point for alignment.
-    Orchestrates the multi-pass detection, clustering, and validation.
+    Uses multi-pass detection and clustering to determine the audio-telemetry offset.
     """
-    print("STARTING ROBUST ALIGNMENT")
+    print("STARTING ALIGNMENT")
     
     # 1. Generate Candidates
     candidates = generate_all_candidates(telemetry, transcript, profile)
@@ -545,11 +456,15 @@ def calculate_offset(transcript: dict, telemetry: dict, profile: dict = None) ->
     print(f"Consensus Offset: {consensus_offset:.1f}s (Confidence: {confidence:.2f})")
     print(f"Based on {len(used_candidates)} agreeing candidates.")
     
-    # 3. LLM Validation
-    print("Validating with LLM...")
-    final_result = calculate_offset_with_llm_validation(consensus_offset, used_candidates, transcript, telemetry)
+    # Get top anchor points for reporting
+    top_candidates = sorted(used_candidates, key=lambda x: x.get("confidence", 0), reverse=True)[:10]
     
-    print(f"Final Offset: {final_result['offset_sec']:.1f}s")
-    print(f"Reasoning: {final_result.get('reasoning')}")
+    print(f"Final Offset: {consensus_offset:.1f}s")
     
-    return final_result
+    return {
+        "offset_sec": consensus_offset,
+        "confidence": confidence,
+        "method": "multi_anchor_clustering",
+        "reasoning": f"Determined from {len(used_candidates)} agreeing anchor points",
+        "anchor_points": top_candidates
+    }
