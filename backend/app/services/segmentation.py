@@ -17,24 +17,24 @@ class FlightPhase(Enum):
     TAXI = "TAXI"
     RUNUP = "RUNUP"    
     TAKEOFF = "TAKEOFF"
-    SUSTAINED_CLIMB = "SUSTAINED_CLIMB"
+    SUSTAINED_CLIMB = "SUSTAINED CLIMB"
     CRUISE = "CRUISE"
-    SUSTAINED_DESCENT = "SUSTAINED_DESCENT"
-    APPROACH = "APPROACH"
+    SUSTAINED_DESCENT = "SUSTAINED DESCENT"
     DOWNWIND = "DOWNWIND"
     BASE = "BASE"
     FINAL = "FINAL"
     LANDING = "LANDING"
-    TOUCH_AND_GO = "TOUCH_AND_GO"
+    TOUCH_AND_GO = "TOUCH AND GO"
     SHUTDOWN = "SHUTDOWN"
 
     # Maneuvers
-    STEEP_TURNS = "STEEP_TURNS"
-    SLOW_FLIGHT = "SLOW_FLIGHT"
-    POWER_OFF_STALL = "POWER_OFF_STALL"
-    POWER_ON_STALL = "POWER_ON_STALL"
-    GROUND_REFERENCE = "GROUND_REFERENCE"
-    EMERGENCY_PROCEDURE = "EMERGENCY_PROCEDURE"
+    MANEUVERS = "MANEUVERS"
+    STEEP_TURNS = "STEEP TURNS"
+    SLOW_FLIGHT = "SLOW FLIGHT"
+    POWER_OFF_STALL = "POWER OFF STALL"
+    POWER_ON_STALL = "POWER ON STALL"
+    GROUND_REFERENCE = "GROUND REFERENCE"
+    EMERGENCY_PROCEDURE = "EMERGENCY PROCEDURE"
 
 
 @dataclass
@@ -296,14 +296,14 @@ def create_enhanced_prompt_v2(
         {candidate_text}
 
         ALLOWED STATES (You MUST pick from this list ONLY):
-        - TAXI: Movement on the ground (Taxi out, Taxi in, Taxi to Runway). (< 25kts)
+        - TAXI: Movement on the ground (Taxi out, Taxi in, Taxi to Runway). (<25kts)
         - RUNUP: Engine run-up, mag checks, cycling prop. (Ground, 0 speed, High RPM)
         - TAKEOFF: Takeoff roll and initial climb to 500' AGL. (Ground -> Air, High RPM, Accel). IMPORTANT: Include ~10 seconds BEFORE liftoff (taxi onto runway, lineup) and ~10 seconds AFTER liftoff (initial climb).
         - SUSTAINED CLIMB: Climb from 500' AGL to Cruise Altitude or Maneuver Altitude.
         - CRUISE: Level flight for transit.
-        - MANEUVERS: General category for airwork (Steep Turns, Stalls, Slow Flight, etc.). *Prefer specific maneuver names like STEEP_TURNS, SLOW_FLIGHT, POWER_OFF_STALL.*
+        - MANEUVERS: General category for airwork (Steep Turns, Stalls, Slow Flight, etc.). *Prefer specific maneuver names like STEEP TURNS, SLOW FLIGHT, POWER OFF STALL, POWER ON STALL.*
         - SUSTAINED DESCENT: Descent from altitude to traffic pattern altitude.
-        - TRAFFIC PATTERN: Operations in the airport pattern (Downwind, Base, Final). Includes landing prep.
+        - TRAFFIC PATTERN: Operations in the airport pattern (Downwind, Base, Final). Includes landing prep and final approach.
         - LANDING: Final approach flare, touchdown, and roll-out. IMPORTANT: Include ~10 seconds BEFORE touchdown (short final, flare) and ~10 seconds AFTER touchdown.
         - SHUTDOWN: Engine shutdown and securing.
 
