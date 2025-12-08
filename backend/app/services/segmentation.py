@@ -252,7 +252,7 @@ def generate_candidates(telemetry: dict, profile: dict = None) -> List[Dict[str,
 # ENHANCED LLM INTEGRATION
 # ============================================================================
 
-def create_enhanced_prompt_v2(
+def create_enhanced_prompt(
     telemetry_summary: str,
     transcript_text: str,
     candidate_segments: List[Dict[str, Any]],
@@ -277,7 +277,7 @@ def create_enhanced_prompt_v2(
     prompt = f"""You are an expert flight instructor analyzing a flight training lesson. Your task is to identify and label specific flight segments for the entire flight, based on the provided telemetry and audio transcript data.
         OBJECTIVE:
         Create a chronological timeline of the flight phases using a STRICT STATE MACHINE approach.
-        Time values in the JSON output MUST be integers representing seconds from the start of the flight (e.g., 0, 45, 120). Do NOT use MM:SS format.
+        Time values in the JSON output MUST be in MM:SS format (e.g., 00:00, 01:30, 05:45).
 
         AIRCRAFT CONTEXT:
         Aircraft Type: {plane_type}
@@ -634,7 +634,7 @@ def detect_segments(
         # Add key events to prompt
         key_events_text = json.dumps(key_events, indent=2)
         
-        prompt = create_enhanced_prompt_v2(
+        prompt = create_enhanced_prompt(
             telemetry_summary, transcript_text, candidates, plane_type, profile
         )
         
