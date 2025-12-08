@@ -427,14 +427,6 @@ def cluster_and_vote_offsets(candidates: List[Dict], bin_size: float = 5.0) -> T
     
     return consensus_offset, confidence, used_candidates
 
-def validate_offset_with_physics(offset: float, telemetry: dict, transcript: dict) -> float:
-    """
-    Checks if the offset causes physics contradictions.
-    Returns a confidence penalty factor (0.0 - 1.0).
-    """
-    # TODO: Implement detailed physics checks (e.g. "climbing" while VSPD < 0)
-    # For now, just return 1.0 (no penalty)
-    return 1.0
 
 # ============================================================================
 # 4. MAIN ENTRY POINT

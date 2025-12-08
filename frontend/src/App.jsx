@@ -438,8 +438,7 @@ function App() {
                     </span>
                     <span> • </span>
                     <span>
-                      Alignment: {analysis.alignment.method} (
-                      {Math.round(analysis.alignment.confidence * 100)}%)
+                      Audio-Telemetry Offset: {analysis.alignment.offset_sec.toFixed(1)}s
                     </span>
                   </div>
                 </div>
@@ -449,11 +448,7 @@ function App() {
                     <strong>Flight Duration:</strong>{' '}
                     {formatTimestamp(analysis.telemetry.metadata.duration_sec || 0)}
                     {' | '}
-                    <strong>Alignment:</strong> {analysis.alignment.method}
-                    (confidence: {(analysis.alignment.confidence * 100).toFixed(0)}%)
-                    {analysis.alignment.offset_sec !== 0 && (
-                      <span> - Offset: {analysis.alignment.offset_sec.toFixed(1)}s</span>
-                    )}
+                    <strong>Audio-Telemetry Offset:</strong> {analysis.alignment.offset_sec.toFixed(1)}s
                   </p>
                   <p style={{ marginTop: '0.5rem', fontSize: '0.9rem', color: '#666' }}>
                     Generating flight overview...
@@ -508,7 +503,7 @@ function App() {
           </section>
         )}
       </main>
-    </div>
+    </div >
   );
 }
 

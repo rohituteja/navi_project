@@ -14,10 +14,8 @@ from openai import OpenAI
 class FlightPhase(Enum):
     """Well-defined flight phases with clear boundaries"""
 
-    PREFLIGHT = "PREFLIGHT"
-    TAXI_OUT = "TAXI_OUT"
-    RUNUP = "RUNUP"
-    TAXI_TO_RUNWAY = "TAXI_TO_RUNWAY"
+    TAXI = "TAXI"
+    RUNUP = "RUNUP"    
     TAKEOFF = "TAKEOFF"
     SUSTAINED_CLIMB = "SUSTAINED_CLIMB"
     CRUISE = "CRUISE"
@@ -28,7 +26,6 @@ class FlightPhase(Enum):
     FINAL = "FINAL"
     LANDING = "LANDING"
     TOUCH_AND_GO = "TOUCH_AND_GO"
-    TAXI_IN = "TAXI_IN"
     SHUTDOWN = "SHUTDOWN"
 
     # Maneuvers
@@ -55,23 +52,14 @@ class PhaseSignature:
 
 # Define signatures for each phase
 PHASE_SIGNATURES = {
-    FlightPhase.PREFLIGHT: PhaseSignature(
-        alt_agl_range=(0, 5),
-        ias_range=(0, 5),
-        rpm_range=(0, 1200),
-        vspd_range=(-50, 50),
-        duration_range=(30, 600),
-        ground_speed_max=0,
-        keywords=["start", "oil pressure", "gauges", "preflight", "checklist"],
-    ),
-    FlightPhase.TAXI_OUT: PhaseSignature(
+    FlightPhase.TAXI: PhaseSignature(
         alt_agl_range=(0, 10),
         ias_range=(0, 25),
         rpm_range=(800, 1500),
         vspd_range=(-50, 50),
         duration_range=(30, 600),
         ground_speed_max=25,
-        keywords=["taxi", "alpha", "bravo", "charlie", "hold short", "tower"],
+        keywords=["taxi", "alpha", "bravo", "charlie", "hold short", "tower", "ground", "ramp"],
     ),
     FlightPhase.RUNUP: PhaseSignature(
         alt_agl_range=(0, 5),
@@ -130,70 +118,43 @@ PHASE_SIGNATURES = {
 }
 
 # ============================================================================
-# IMPROVED RULE-BASED DETECTION
-# ============================================================================
-
-
-# ============================================================================
 # CANDIDATE GENERATOR (HEURISTIC SEGMENTATION)
 # ============================================================================
 
 def smooth_classifications(classifications, data_points, min_duration):
-    """Eliminate very short segments (likely noise)."""
+    """Eliminate very short segments (likely noise) by merging them into neighbors."""
     if not classifications:
         return []
         
     smoothed = classifications.copy()
-    
     i = 0
+    
     while i < len(smoothed):
-        # Find run of same classification
+        # 1. Identify continuous segment
         start = i
         current_class = smoothed[i]
-        
         while i < len(smoothed) and smoothed[i] == current_class:
             i += 1
-        
         end = i
-        # Calculate duration
-        # Handle edge case where data_points might be shorter than classifications if something went wrong, 
-        # but they should match.
+        
+        # 2. Check duration
         if start < len(data_points) and end-1 < len(data_points):
-            duration = data_points[end-1]["time_sec"] - data_points[start]["time_sec"]
+            t_start = data_points[start]["time_sec"]
+            t_end = data_points[end-1]["time_sec"]
+            duration = t_end - t_start
             
-            # If segment too short, merge with neighbors
-            if duration < min_duration and start > 0 and end < len(smoothed):
-                # Merge with longer neighbor or just previous?
-                # Simple approach: merge with previous
+            # 3. Merge if too short
+            if duration < min_duration:
+                # Determine neighbor to merge with (prefer previous to extend current state)
                 prev_class = smoothed[start - 1] if start > 0 else None
                 next_class = smoothed[end] if end < len(smoothed) else None
                 
-                # Prefer merging with "STABLE_FLIGHT" or "TAXI" over "MANEUVER" if ambiguous?
-                # Or just use previous.
-                fill_class = prev_class or next_class
+                fill_class = prev_class if prev_class else next_class
                 
                 if fill_class:
                     for j in range(start, end):
                         smoothed[j] = fill_class
-                    
-                    # Backtrack to re-evaluate merged section
-                    i = start 
-                    # But be careful of infinite loops if we just merged with previous and it's still short?
-                    # The previous segment grows, so it should be fine.
-                    # To be safe, we can just continue and let the next pass (if we did multiple) handle it,
-                    # or just accept it grows.
-                    # Actually, if we merge with previous, we should re-check from start of previous?
-                    # For simplicity, let's just continue, as we are iterating forward.
-                    # If we merge with previous, the current block becomes previous class.
-                    # The loop continues from 'end' usually, but here we set i=start?
-                    # If we set i=start, we re-evaluate the now-merged block.
-                    # Since it merged with previous, it is now part of a larger block.
-                    # We need to find the start of that larger block to check its total duration?
-                    # No, let's just continue.
-                    i = end
-        else:
-            i += 1
-            
+                        
     return smoothed
 
 def generate_candidates(telemetry: dict, profile: dict = None) -> List[Dict[str, Any]]:
@@ -298,9 +259,6 @@ def create_enhanced_prompt_v2(
     plane_type: str = "Unknown",
     profile: dict = None
 ) -> str:
-    """
-    Improved prompt with better context and clearer instructions
-    """
     candidate_text = ""
     if candidate_segments:
         candidate_text = "\n\nCANDIDATE SEGMENTS (Heuristic Regions of Interest):\n"
@@ -317,122 +275,220 @@ def create_enhanced_prompt_v2(
         profile_text += json.dumps(profile, indent=2)
 
     prompt = f"""You are an expert flight instructor analyzing a flight training lesson. Your task is to identify and label specific flight segments for the entire flight, based on the provided telemetry and audio transcript data.
+        OBJECTIVE:
+        Create a chronological timeline of the flight phases using a STRICT STATE MACHINE approach.
+        Time values in the JSON output MUST be integers representing seconds from the start of the flight (e.g., 0, 45, 120). Do NOT use MM:SS format.
 
-OBJECTIVE:
-Create a chronological timeline of the flight phases using a STRICT STATE MACHINE approach.
+        AIRCRAFT CONTEXT:
+        Aircraft Type: {plane_type}
+        Use your knowledge of this specific aircraft's operating parameters (V-speeds, RPM ranges, performance characteristics).
+        {profile_text}
 
-AIRCRAFT CONTEXT:
-Aircraft Type: {plane_type}
-Use your knowledge of this specific aircraft's operating parameters (V-speeds, RPM ranges, performance characteristics).
-{profile_text}
+        INPUT DATA:
 
-INPUT DATA:
+        1. TELEMETRY SUMMARY (Sampled):
+        {telemetry_summary}
 
-1. TELEMETRY SUMMARY (Sampled):
-{telemetry_summary}
+        2. AUDIO TRANSCRIPT:
+        {transcript_text}
 
-2. AUDIO TRANSCRIPT:
-{transcript_text}
+        3. HEURISTIC CANDIDATES (Physics-based hints):
+        {candidate_text}
 
-3. HEURISTIC CANDIDATES (Physics-based hints):
-{candidate_text}
-*Hints:*
-- **GROUND_HIGH_RPM**: Likely the main Run-up mag check.
-- **STATIONARY**: Could be Preflight, or the "Idle Check" phase of Run-up (if it follows High RPM).
-- **TAXI**: Moving on ground. Likely Taxi Out or Taxi to Runway.
+        ALLOWED STATES (You MUST pick from this list ONLY):
+        - TAXI: Movement on the ground (Taxi out, Taxi in, Taxi to Runway). (< 25kts)
+        - RUNUP: Engine run-up, mag checks, cycling prop. (Ground, 0 speed, High RPM)
+        - TAKEOFF: Takeoff roll and initial climb to 500' AGL. (Ground -> Air, High RPM, Accel). IMPORTANT: Include ~10 seconds BEFORE liftoff (taxi onto runway, lineup) and ~10 seconds AFTER liftoff (initial climb).
+        - SUSTAINED CLIMB: Climb from 500' AGL to Cruise Altitude or Maneuver Altitude.
+        - CRUISE: Level flight for transit.
+        - MANEUVERS: General category for airwork (Steep Turns, Stalls, Slow Flight, etc.). *Prefer specific maneuver names like STEEP_TURNS, SLOW_FLIGHT, POWER_OFF_STALL.*
+        - SUSTAINED DESCENT: Descent from altitude to traffic pattern altitude.
+        - TRAFFIC PATTERN: Operations in the airport pattern (Downwind, Base, Final). Includes landing prep.
+        - LANDING: Final approach flare, touchdown, and roll-out. IMPORTANT: Include ~10 seconds BEFORE touchdown (short final, flare) and ~10 seconds AFTER touchdown.
+        - SHUTDOWN: Engine shutdown and securing.
 
-ALLOWED STATES (You MUST pick from this list ONLY):
-- TAXI (TAXI TO RUNWAY, TAXI TO SHUTDOWN): Movement from on the ground, before takeoff and run up, after landing, and in between landings and takeoff. (Ground, < 25kts)
-- RUNUP: Engine run-up, mag checks, cycling prop. (Ground, 0 speed, High RPM)
-- TAKEOFF: Takeoff roll and initial climb to 500' AGL. (Ground -> Air, High RPM, Accel). IMPORTANT: Include ~10 seconds BEFORE liftoff (taxi onto runway, lineup) and ~10 seconds AFTER liftoff (initial climb). The segment should provide context around the takeoff event itself.
-- SUSTAINED_CLIMB: Climb from 500' AGL to Cruise Altitude or Maneuver Altitude.
-- CRUISE: Level flight for transit.
-- MANEUVERS: General category for airwork (Steep Turns, Stalls, Slow Flight, etc.). *Prefer specific maneuver names if possible, e.g., STEEP_TURNS, SLOW_FLIGHT, POWER_OFF_STALL, POWER_ON_STALL.*
-- SUSTAINED_DESCENT: Descent from altitude to traffic pattern altitude.
-- TRAFFIC_PATTERN: Operations in the airport pattern (Downwind, Base, Final). Includes any all prep for landing procedures and actions. Try and see context of what airport may be being flown into and use knowledge of its traffic pattern altitude and procedures as context.
-- LANDING: Final approach flare, touchdown, and roll-out. IMPORTANT: Include ~10 seconds BEFORE touchdown (short final, flare) and ~10 seconds AFTER touchdown (roll-out, turn off runway). The segment should capture the full landing context.
-- SHUTDOWN: Engine shutdown and securing.
+        STATE TRANSITION LOGIC (Follow this flow):
+        1. TAXI -> RUNUP, TAKEOFF, SHUTDOWN
+        2. RUNUP -> TAXI, TAKEOFF
+        3. TAKEOFF -> SUSTAINED CLIMB or TRAFFIC PATTERN
+        4. SUSTAINED CLIMB -> CRUISE, MANEUVERS, TRAFFIC PATTERN, SUSTAINED DESCENT
+        5. CRUISE <-> MANEUVERS
+        6. CRUISE, MANEUVERS -> SUSTAINED DESCENT, TRAFFIC PATTERN
+        7. SUSTAINED DESCENT -> TRAFFIC PATTERN, LANDING
+        8. TRAFFIC PATTERN -> LANDING, SUSTAINED CLIMB (for go arounds)
+        9. LANDING -> TAXI, TAKEOFF (Touch & Go)
 
-STATE TRANSITION LOGIC (Follow this flow):
-1. TAXI -> RUNUP, TAKEOFF, SHUTDOWN
-2. RUNUP -> TAXI, TAKEOFF
-3. TAKEOFF -> SUSTAINED_CLIMB (after 500' AGL or so) or TRAFFIC_PATTERN
-4. SUSTAINED_CLIMB -> CRUISE or MANEUVERS or TRAFFIC_PATTERN or SUSTAINED_DESCENT
-5. CRUISE <-> MANEUVERS (Can switch back and forth)
-6. CRUISE, MANEUVERS -> SUSTAINED_DESCENT, TRAFFIC_PATTERN, SUSTAINED_CLIMB
-7. SUSTAINED_DESCENT -> TRAFFIC_PATTERN (or directly to LANDING) or CRUISE or MANUEVERS or SUSTAINED_CLIMB
-8. TRAFFIC_PATTERN -> LANDING, SUSTAINED_DESCENT, SUSTAINED_CLIMB, CRUISE
-9. LANDING -> TAXI_IN, TAKEOFF (if Touch & Go)
+        CRITICAL RULES:
+        1. **Granularity**: Distinguish between TAXI and RUNUP.
+        2. **Run-up Detection**: High RPM, 0 Ground Speed.
+        3. **Run-up Termination**: Ends with "runup complete" or movement.
+        4. **Takeoff vs Climb**: TAKEOFF ends when established in climb (~500' AGL).
+        5. **Pattern Work**: Can differ if staying in pattern.
+        6. **Transcript is Key**: Use pilot calls.
 
-CRITICAL RULES:
-1. **Granularity**: Do NOT lump all ground ops into "TAXI". You MUST distinguish between TAXI and RUNUP.
-2. **Run-up Detection**: Look for High RPM (for the model of plane) with 0 Ground Speed. Audio sample cues: "mags", "checks", "runup", "RPM".
-3. **Run-up Termination**: The RUNUP phase includes the high-RPM check AND the subsequent return to idle (idle check). It ends ONLY when:
-   - The pilot announces "runup complete", "ready for takeoff", or calls tower.
-   - OR the aircraft begins significant movement (Taxi to Runway).
-   - DO NOT end the RUNUP segment just because RPM drops; wait for the "complete" call or movement. Going to idle signifies that the run up is ending soon.
-4. **Takeoff vs Climb**: TAKEOFF ends when the aircraft is established in a climb (approx 500' AGL). Then switch to SUSTAINED_CLIMB.
-5. **Pattern Work**: If the flight stays local and in the pattern, it might go TAKEOFF -> SUSTAINED_CLIMB -> TRAFFIC_PATTERN -> SUSTAINED_DESCENT -> LANDING -> TAKEOFF... and back again.
-6. **Transcript is Key**: Use pilot calls ("Turning base", "Clear of runway", "Start taxi") to pinpoint transitions.
-
-OUTPUT FORMAT:
-Return a JSON object with a "segments" list.
-Example:
-{{
-  "segments": [
-    {{
-      "name": "TAXI",
-      "start_time": 0,
-      "end_time": 45,
-      "description": "Engine start and avionics setup, transition to runup area",
-      "confidence": 0.95
-    }},
-    ...
-  ]
-}}
-"""
+        OUTPUT FORMAT:
+        Return a JSON object with a "segments" list.
+        Example:
+        {{
+        "segments": [
+            {{
+            "name": "TAXI",
+            "start_time": 0,
+            "end_time": 45,
+            "description": "Engine start and avionics setup, transition to runup area",
+            "confidence": 0.95
+            }},
+            ...
+        ]
+        }}
+        """
     return prompt
 
 
-def identify_key_events_llm(transcript_text, telemetry_summary, plane_type, profile):
-    """Ask LLM to identify ONLY major events: engine start, takeoff, landing, shutdown."""
-    api_key = os.environ.get("OPENAI_API_KEY")
-    if not api_key:
-        return []
+def detect_engine_start(data: List[Dict], profile: dict = None) -> Optional[Dict[str, Any]]:
+    """Detect engine start - first RPM rise above idle threshold."""
+    # Get idle RPM from profile, default to 800
+    idle_rpm = 800
+    if profile and "rpm_profiles" in profile:
+        idle_range = profile["rpm_profiles"].get("idle_taxi", [600, 1000])
+        idle_rpm = idle_range[0] if isinstance(idle_range, list) else 600
+    
+    for i, p in enumerate(data):
+        current_rpm = p.get("rpm", 0)
+        prev_rpm = data[i-1].get("rpm", 0) if i > 0 else 0
         
+        if current_rpm > idle_rpm and prev_rpm < idle_rpm:
+            return {
+                "name": "ENGINE_START",
+                "time": int(p["time_sec"]),
+                "evidence": f"RPM rose to {int(current_rpm)} at T={int(p['time_sec'])}s",
+                "confidence": 0.95
+            }
+    return None
+
+
+def detect_takeoffs(data: List[Dict], profile: dict = None) -> List[Dict[str, Any]]:
+    """Detect takeoff events - acceleration through rotation speed on ground."""
+    takeoffs = []
+    
+    # Get thresholds from profile
+    takeoff_ias = 40
+    high_rpm = 4000
+    if profile:
+        if "maneuver_thresholds" in profile:
+            takeoff_ias = profile["maneuver_thresholds"].get("takeoff_ias_min", 40)
+        if "rpm_profiles" in profile:
+            # Use cruise or full power RPM as takeoff threshold
+            cruise_range = profile["rpm_profiles"].get("cruise", [4500, 5200])
+            high_rpm = cruise_range[0] if isinstance(cruise_range, list) else 4000
+    
+    for i in range(10, len(data) - 10):
+        current = data[i]
+        prev = data[i-5]
+        
+        # Accelerating through takeoff speed on ground with high RPM
+        is_accelerating = current["ias"] > takeoff_ias and prev["ias"] < 30
+        has_high_rpm = current.get("rpm", 0) > high_rpm
+        on_ground = current.get("is_ground", False)
+        
+        if is_accelerating and has_high_rpm and on_ground:
+            # Ensure distinct (>60s apart from previous takeoff)
+            if not takeoffs or (current["time_sec"] - takeoffs[-1]["time"] > 60):
+                takeoffs.append({
+                    "name": "TAKEOFF",
+                    "time": int(current["time_sec"]),
+                    "evidence": f"Speed {int(current['ias'])}kts, RPM {int(current.get('rpm', 0))}, accelerating on ground",
+                    "confidence": 0.9
+                })
+    
+    return takeoffs
+
+
+def detect_landings(data: List[Dict], profile: dict = None) -> List[Dict[str, Any]]:
+    """Detect landing/touchdown events - altitude drops to ground."""
+    landings = []
+    
+    for i in range(10, len(data) - 10):
+        current = data[i]
+        prev = data[i-5]
+        
+        # AGL drops from >20ft to <10ft (touchdown)
+        was_airborne = prev["alt_agl"] > 20
+        now_on_ground = current["alt_agl"] < 10
+        
+        if was_airborne and now_on_ground:
+            # Ensure distinct (>60s apart from previous landing)
+            if not landings or (current["time_sec"] - landings[-1]["time"] > 60):
+                landings.append({
+                    "name": "LANDING",
+                    "time": int(current["time_sec"]),
+                    "evidence": f"AGL dropped from {int(prev['alt_agl'])}ft to {int(current['alt_agl'])}ft",
+                    "confidence": 0.85
+                })
+    
+    return landings
+
+
+def detect_engine_shutdown(data: List[Dict], profile: dict = None) -> Optional[Dict[str, Any]]:
+    """Detect engine shutdown - last RPM drop below idle threshold."""
+    # Get idle RPM from profile
+    idle_rpm = 600
+    if profile and "rpm_profiles" in profile:
+        idle_range = profile["rpm_profiles"].get("idle_taxi", [600, 1000])
+        idle_rpm = idle_range[0] if isinstance(idle_range, list) else 600
+    
+    # Scan backwards from end to find last shutdown
+    for i in range(len(data) - 1, 10, -1):
+        current_rpm = data[i].get("rpm", 0)
+        prev_rpm = data[i-5].get("rpm", 0)
+        
+        if current_rpm < idle_rpm and prev_rpm > idle_rpm:
+            return {
+                "name": "ENGINE_SHUTDOWN",
+                "time": int(data[i]["time_sec"]),
+                "evidence": f"RPM dropped to {int(current_rpm)} at T={int(data[i]['time_sec'])}s",
+                "confidence": 0.9
+            }
+    return None
+
+
+def validate_events_with_llm(events: List[Dict], transcript_text: str) -> List[Dict[str, Any]]:
+    """Optional LLM pass to confirm/adjust detected events using transcript (±5 seconds)."""
+    api_key = os.environ.get("OPENAI_API_KEY")
+    if not api_key or not events:
+        return events
+    
     client = OpenAI(api_key=api_key)
     
-    prompt = f"""Identify ONLY these major flight events:
-- Engine Start
-- Takeoff (wheels leave ground)
-- Landing (touchdown)
-- Engine Shutdown
+    events_json = json.dumps(events, indent=2)
+    
+    prompt = f"""Review these detected flight events and confirm or adjust their timestamps based on the transcript.
+    
+DETECTED EVENTS (from telemetry):
+{events_json}
 
-For each event, provide:
-1. Event name
-2. Approximate time (±10 seconds is fine)
-3. Evidence from transcript and telemetry
-
-Do NOT try to identify every segment. Just these 4 key events. Multiple takeoffs and landings may be present through the flight. Shutdown will happen only at the end after the final landing.
-
-INPUT DATA:
-Telemetry Summary:
-{telemetry_summary}
-
-Transcript:
+TRANSCRIPT:
 {transcript_text}
+
+INSTRUCTIONS:
+- For each event, confirm the time is correct OR adjust by up to ±5 seconds if transcript evidence suggests a more accurate time.
+- Look for keywords like "engine start", "rotation", "liftoff", "touchdown", "shutdown" near the event times.
+- If the event is confirmed, keep the original time.
+- Return the same events list with potentially adjusted times.
+- **IMPORTANT**: The 'time' field in the JSON MUST be an integer (seconds from start), NOT a "MM:SS" string.
 
 OUTPUT JSON:
 {{
-  "events": [
-    {{ "name": "TAKEOFF", "time": 120, "evidence": "Speed > 50kts, climbing" }},
-    ...
-  ]
+    "events": [
+        {{ "name": "ENGINE_START", "time": 15, "evidence": "confirmed by transcript", "confidence": 0.95 }},
+        ...
+    ]
 }}
 """
+    
     try:
         response = client.chat.completions.create(
-            model="gpt-5-mini",
+            model="gpt-5-nano",
             messages=[
                 {"role": "system", "content": "You are a flight data expert. Output JSON only."},
                 {"role": "user", "content": prompt}
@@ -440,10 +496,67 @@ OUTPUT JSON:
             response_format={"type": "json_object"}
         )
         result = json.loads(response.choices[0].message.content)
-        return result.get("events", [])
+        validated = result.get("events", events)
+        print(f"LLM validated {len(validated)} events")
+        return validated
     except Exception as e:
-        print(f"Key event detection error: {e}")
+        print(f"LLM validation error: {e}, using telemetry-detected events")
+        return events
+
+
+def identify_key_events(
+    telemetry: dict, 
+    transcript_text: str = "", 
+    profile: dict = None,
+    use_llm_validation: bool = True
+) -> List[Dict[str, Any]]:
+    """
+    Identify major flight anchor events from telemetry data.
+    Uses physics-based detection as primary, with optional LLM validation.
+    
+    Returns events: ENGINE_START, TAKEOFF(s), LANDING(s), ENGINE_SHUTDOWN
+    """
+    data = telemetry.get("data", [])
+    if not data:
         return []
+    
+    events = []
+    
+    # 1. Detect Engine Start
+    engine_start = detect_engine_start(data, profile)
+    if engine_start:
+        events.append(engine_start)
+        print(f"Detected ENGINE_START at T={engine_start['time']}s")
+    
+    # 2. Detect Takeoffs (can be multiple for touch-and-go)
+    takeoffs = detect_takeoffs(data, profile)
+    events.extend(takeoffs)
+    for t in takeoffs:
+        print(f"Detected TAKEOFF at T={t['time']}s")
+    
+    # 3. Detect Landings (can be multiple)
+    landings = detect_landings(data, profile)
+    events.extend(landings)
+    for l in landings:
+        print(f"Detected LANDING at T={l['time']}s")
+    
+    # 4. Detect Engine Shutdown
+    shutdown = detect_engine_shutdown(data, profile)
+    if shutdown:
+        events.append(shutdown)
+        print(f"Detected ENGINE_SHUTDOWN at T={shutdown['time']}s")
+    
+    # Sort by time
+    events.sort(key=lambda e: e["time"])
+    
+    print(f"Telemetry detection found {len(events)} key events")
+    
+    # Optional LLM validation
+    if use_llm_validation and transcript_text:
+        print("Running LLM validation on key events...")
+        events = validate_events_with_llm(events, transcript_text)
+    
+    return events
 
 def fill_segments_between_events(key_events, candidates, total_duration):
     """
@@ -454,13 +567,13 @@ def fill_segments_between_events(key_events, candidates, total_duration):
     # We can just return the candidates, but maybe annotate them if they overlap with key events?
     return candidates
 
-def detect_segments_v2(
+def detect_segments(
     transcript: dict, telemetry: dict, offset_sec: float = 0, plane_type: str = "Unknown", profile: dict = None
 ) -> List[Dict[str, Any]]:
     """
     Two-Stage LLM Approach for Segmentation.
     """
-    print("SENSOR FUSION FLIGHT SEGMENTATION V2")
+    print("SENSOR FUSION FLIGHT SEGMENTATION")
     print(f"Aircraft: {plane_type}")
 
     # 1. Data Ingestion & Pre-processing
@@ -502,9 +615,9 @@ def detect_segments_v2(
             t_end = int(seg["end"] + offset_sec)
             transcript_text += f"[{t_start}-{t_end}s]: {seg['text']}\n"
 
-    # Stage 1: Identify Key Events
+    # Stage 1: Identify Key Events (Telemetry-first with optional LLM validation)
     print("Stage 1: Identifying Key Events...")
-    key_events = identify_key_events_llm(transcript_text, telemetry_summary, plane_type, profile)
+    key_events = identify_key_events(telemetry, transcript_text, profile, use_llm_validation=True)
     print(f"Found {len(key_events)} key events.")
     
     # Stage 2: Refine Boundaries (Main Segmentation)
@@ -558,34 +671,30 @@ def detect_segments_v2(
         print(f"LLM error: {e}")
         return candidates
 
-def detect_segments(
-    transcript: dict, telemetry: dict, offset_sec: float = 0, plane_type: str = "Unknown", profile: dict = None
-) -> List[Dict[str, Any]]:
-    """
-    Main entry point for Sensor Fusion segmentation.
-    Delegates to V2.
-    """
-    return detect_segments_v2(transcript, telemetry, offset_sec, plane_type, profile)
-
-
-def verify_llm_segments(
-    llm_segments: List[Dict[str, Any]], telemetry: dict
-) -> List[Dict[str, Any]]:
-    """
-    Verify the plausibility of LLM-generated segments against telemetry data.
-    (Placeholder for now)
-    """
-    # TODO: Implement verification logic
-    return llm_segments
-
-
 # ============================================================================
 # SEGMENT BUFFERING
 # ============================================================================
 
+def parse_time(val: Any) -> int:
+    """Helper to safely parse time which might be int, string int, or MM:SS."""
+    if isinstance(val, (int, float)):
+        return int(val)
+    if isinstance(val, str):
+        # Try MM:SS format
+        if ":" in val:
+            try:
+                parts = val.split(":")
+                return int(parts[0]) * 60 + int(parts[1])
+            except ValueError:
+                pass
+        # Try basic int string
+        try:
+            return int(val)
+        except ValueError:
+            pass
+    return 0
+
 BUFFER_SECONDS = 10  # Buffer to add before/after critical segments
-
-
 def buffer_critical_segments(segments: List[Dict[str, Any]], total_duration: int) -> List[Dict[str, Any]]:
     """
     Expands TAKEOFF and LANDING segments by stealing time from neighbors.
@@ -598,35 +707,56 @@ def buffer_critical_segments(segments: List[Dict[str, Any]], total_duration: int
         return segments
 
     # Sort first to ensure proper neighbor detection
-    sorted_segs = sorted(segments, key=lambda x: x.get("start_time", 0))
+    # Use parse_time safely
+    sorted_segs = sorted(segments, key=lambda x: parse_time(x.get("start_time", 0)))
     buffered = []
     
     for i, seg in enumerate(sorted_segs):
         new_seg = seg.copy()
+        # Ensure times are integers (LLM may return strings)
+        new_seg["start_time"] = parse_time(seg.get("start_time", 0))
+        new_seg["end_time"] = parse_time(seg.get("end_time", 0))
         name = seg.get("name", "").upper()
 
         if name == "TAKEOFF":
             # Extend start backwards
-            original_start = seg["start_time"]
+            original_start = new_seg["start_time"]
             new_start = max(0, original_start - BUFFER_SECONDS)
             new_seg["start_time"] = new_start
             
             # Extend end forward
-            original_end = seg["end_time"]
-            max_end = total_duration if i + 1 >= len(sorted_segs) else sorted_segs[i + 1]["end_time"] - 5
+            original_end = new_seg["end_time"]
+            # Look ahead safely
+            max_end = total_duration
+            if i + 1 < len(sorted_segs):
+                next_start = parse_time(sorted_segs[i + 1].get("start_time", 0))
+                max_end = next_start - 5
+            
             new_seg["end_time"] = min(original_end + BUFFER_SECONDS, max_end)
             
             print(f"Buffered TAKEOFF: {original_start}-{original_end}s -> {new_seg['start_time']}-{new_seg['end_time']}s")
 
         elif name == "LANDING":
             # Extend start backwards
-            original_start = seg["start_time"]
-            min_start = 0 if i == 0 else sorted_segs[i - 1]["start_time"] + 5
+            original_start = new_seg["start_time"]
+            min_start = 0 
+            if i > 0:
+                 # Look back safely
+                 prev_start = parse_time(sorted_segs[i - 1].get("start_time", 0))
+                 # Actually we care about previous end time probably, but strict state machine implies they touch
+                 # Let's just use start_time + 5 as a constraint for now? 
+                 # Or just use the previous segment start + 5
+                 min_start = prev_start + 5
+
             new_seg["start_time"] = max(min_start, original_start - BUFFER_SECONDS)
             
             # Extend end forward
-            original_end = seg["end_time"]
-            max_end = total_duration if i + 1 >= len(sorted_segs) else sorted_segs[i + 1]["end_time"] - 5
+            original_end = new_seg["end_time"]
+            max_end = total_duration
+            if i + 1 < len(sorted_segs):
+                 next_start = parse_time(sorted_segs[i + 1].get("start_time", 0))
+                 max_end = next_start - 5
+
             new_seg["end_time"] = min(original_end + BUFFER_SECONDS, max_end)
             
             print(f"Buffered LANDING: {original_start}-{original_end}s -> {new_seg['start_time']}-{new_seg['end_time']}s")
@@ -645,13 +775,16 @@ def post_process_segments(segments: List[Dict[str, Any]], total_duration: int) -
     if not segments:
         return []
         
-    # 1. Sort
+    # 1. Sort (ensure times are integers first)
+    for seg in segments:
+        seg["start_time"] = int(seg.get("start_time", 0))
+        seg["end_time"] = int(seg.get("end_time", 0))
     sorted_segments = sorted(segments, key=lambda x: x["start_time"])
     
     # 2. Merge consecutive identical segments
     merged = []
     if sorted_segments:
-        current = sorted_segments[0]
+        current = sorted_segments[0].copy()
         for next_seg in sorted_segments[1:]:
             if current["name"] == next_seg["name"]:
                 # Merge
@@ -698,4 +831,3 @@ def post_process_segments(segments: List[Dict[str, Any]], total_duration: int) -
         print(f"Timeline validated: {merged[0]['start_time']}s to {merged[-1]['end_time']}s (continuous)")
 
     return merged
-
