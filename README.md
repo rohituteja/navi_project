@@ -43,7 +43,7 @@ The application is built on a **decoupled client-server architecture**, designed
 1.  **Ingestion**: User uploads Flight Telemetry (CSV/Excel) and Cockpit Audio (MP3/WAV) and selects the **Aircraft Profile**.
 2.  **Normalization**: Backend standardizes data formats (standard telemetry schema).
 3.  **Transcription**: OpenAI Whisper converts audio to text with timestamps.
-4.  **Robust Alignment**: The system synchronizes audio and telemetry using a multi-detector clustering algorithm validated by an LLM.
+4.  **Robust Alignment**: The system synchronizes audio and telemetry using a multi-detector clustering algorithm.
 5.  **Sensor Fusion Analysis**: The core engine combines physical data with semantic audio data to segment the flight using a two-stage AI process, guided by aircraft-specific performance data.
 6.  **Visualization**: Frontend renders the aligned timeline, allowing pilots to "replay" the flight.
 
@@ -63,7 +63,7 @@ The most complex part of the system is the **Flight Segmentation Logic** (`backe
     -   **Stage 1 (Key Events)**: The LLM first identifies major anchor events (Engine Start, Takeoff, Landing, Shutdown) to establish a global timeline.
     -   **Stage 2 (Refinement)**: We feed the **Heuristic Candidates**, **Telemetry Summary**, **Audio Transcript**, and **Key Events** into the LLM.
     -   The LLM acts as a "Flight Instructor", using the semantic cues from the audio ("Clear of runway") to refine the physical boundaries found by the heuristics.
-    -   It enforces a **Strict State Machine** (e.g., `PREFLIGHT` -> `TAXI` -> `RUNUP` -> `TAKEOFF`) to ensure logical flow between segments.
+    -   It enforces a **Strict State Machine** (e.g., `TAXI` -> `RUNUP` -> `TAKEOFF` -> `SUSTAINED CLIMB`) to ensure logical flow between segments.
 
 ### 🔗 Robust Audio-Telemetry Alignment (`alignment.py`)
 Synchronizing a separate audio recording with G3X flight logs is difficult due to clock drift and lack of common timestamps. We solved this with a **Multi-Pass Clustering Strategy**:
@@ -75,7 +75,6 @@ Synchronizing a separate audio recording with G3X flight logs is difficult due t
     -   `Takeoff Roll` & `Landings`
     -   `Steep Turns` & `Stall Warnings`
 2.  **Clustering & Voting**: These candidates are clustered to find a consensus time offset. High-confidence events (like a distinct RPM spike during run-up) are weighted more heavily.
-3.  **LLM Validation**: The proposed offset and top anchor points are sent to an LLM (GPT-5-mini) for a final sanity check to ensure physical and semantic consistency.
 
 ### 📊 Telemetry & Profiles
 -   **Normalization**: We use `pandas` to create a unified internal schema from Garmin G3X Excel files.
@@ -94,7 +93,7 @@ Analyzing an hour-long flight takes time.
 ### Backend (Python + FastAPI)
 -   **FastAPI**: Chosen for native async support (crucial for long-running AI tasks) and auto-generated OpenAPI docs.
 -   **Pandas**: The industry standard for time-series data manipulation.
--   **OpenAI GPT-5-mini**: Used for high-speed, cost-effective semantic analysis and validation.
+-   **OpenAI GPT-5-nano / GPT-5-mini**: Used for high-speed, cost-effective semantic analysis. GPT-5-nano handles lightweight event validation; GPT-5-mini handles full segmentation and debrief generation.
 
 ### Frontend (React + Vite)
 -   **React**: Component-based architecture suitable for complex dashboards.
