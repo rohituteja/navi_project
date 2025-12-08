@@ -381,11 +381,7 @@ function App() {
               </div>
               <div className="form-group">
                 <label>Cockpit Audio (.mp3) *</label>
-                <input
-                  type="file"
-                  accept=".mp3"
-                  onChange={(e) => handleFileChange(e, 'audio')}
-                />
+                <input type="file" accept=".mp3" onChange={(e) => handleFileChange(e, 'audio')} />
               </div>
               <div className="form-group">
                 <label>Plane Type</label>
@@ -437,9 +433,7 @@ function App() {
                       Duration: {formatTimestamp(analysis.telemetry.metadata.duration_sec || 0)}
                     </span>
                     <span> • </span>
-                    <span>
-                      Audio-Telemetry Offset: {analysis.alignment.offset_sec.toFixed(1)}s
-                    </span>
+                    <span>Audio-Telemetry Offset: {analysis.alignment.offset_sec.toFixed(1)}s</span>
                   </div>
                 </div>
               ) : (
@@ -448,7 +442,8 @@ function App() {
                     <strong>Flight Duration:</strong>{' '}
                     {formatTimestamp(analysis.telemetry.metadata.duration_sec || 0)}
                     {' | '}
-                    <strong>Audio-Telemetry Offset:</strong> {analysis.alignment.offset_sec.toFixed(1)}s
+                    <strong>Audio-Telemetry Offset:</strong>{' '}
+                    {analysis.alignment.offset_sec.toFixed(1)}s
                   </p>
                   <p style={{ marginTop: '0.5rem', fontSize: '0.9rem', color: '#666' }}>
                     Generating flight overview...
@@ -466,13 +461,13 @@ function App() {
               {(analysis.segments && analysis.segments.length > 0
                 ? analysis.segments
                 : [
-                  {
-                    name: 'Full Flight',
-                    start_time: 0,
-                    end_time: analysis.telemetry.metadata.duration_sec || 0,
-                    description: 'Full flight duration (no segments detected).',
-                  },
-                ]
+                    {
+                      name: 'Full Flight',
+                      start_time: 0,
+                      end_time: analysis.telemetry.metadata.duration_sec || 0,
+                      description: 'Full flight duration (no segments detected).',
+                    },
+                  ]
               )
                 .map((segment, segIndex) => {
                   // Find all transcript segments that fall within this flight segment
@@ -503,7 +498,7 @@ function App() {
           </section>
         )}
       </main>
-    </div >
+    </div>
   );
 }
 
