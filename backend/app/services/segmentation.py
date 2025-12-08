@@ -64,7 +64,7 @@ PHASE_SIGNATURES = {
     FlightPhase.RUNUP: PhaseSignature(
         alt_agl_range=(0, 5),
         ias_range=(0, 5),
-        rpm_range=(1500, 2300),
+        rpm_range=(1500, 5000),
         vspd_range=(-50, 50),
         duration_range=(60, 300),
         ground_speed_max=0,
@@ -694,7 +694,7 @@ def parse_time(val: Any) -> int:
             pass
     return 0
 
-BUFFER_SECONDS = 10  # Buffer to add before/after critical segments
+BUFFER_SECONDS = 15  # Buffer to add before/after critical segments
 def buffer_critical_segments(segments: List[Dict[str, Any]], total_duration: int) -> List[Dict[str, Any]]:
     """
     Expands TAKEOFF and LANDING segments by stealing time from neighbors.

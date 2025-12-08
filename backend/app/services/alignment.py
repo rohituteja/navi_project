@@ -209,7 +209,7 @@ def find_takeoff_candidates(telemetry: dict, transcript: dict, profile: dict) ->
         for t in takeoff_times:
             if t - distinct_takeoffs[-1] > 60: distinct_takeoffs.append(t)
             
-    keywords = ["takeoff", "taking off", "rolling", "full power", "clear for takeoff"]
+    keywords = ["takeoff", "taking off", "rolling", "full power", "clear for takeoff", "rotate"]
     matches = find_transcript_matches(transcript, keywords)
     
     for t_time in distinct_takeoffs:
