@@ -372,10 +372,10 @@ function App() {
           {!analysis && (
             <>
               <div className="form-group">
-                <label>Telemetry (.xlsx) *</label>
+                <label>Telemetry (Garmin G3X or G1000 .xlsx/.csv) *</label>
                 <input
                   type="file"
-                  accept=".xlsx"
+                  accept=".xlsx,.csv"
                   onChange={(e) => handleFileChange(e, 'telemetry')}
                 />
               </div>
@@ -392,6 +392,9 @@ function App() {
                 >
                   <option value="Sling Next Generation Trainer (NGT)">
                     Sling Next Generation Trainer (NGT)
+                  </option>
+                  <option value="Cessna 172S (G1000)">
+                    Cessna 172S (G1000)
                   </option>
                 </select>
               </div>
@@ -461,13 +464,13 @@ function App() {
               {(analysis.segments && analysis.segments.length > 0
                 ? analysis.segments
                 : [
-                    {
-                      name: 'Full Flight',
-                      start_time: 0,
-                      end_time: analysis.telemetry.metadata.duration_sec || 0,
-                      description: 'Full flight duration (no segments detected).',
-                    },
-                  ]
+                  {
+                    name: 'Full Flight',
+                    start_time: 0,
+                    end_time: analysis.telemetry.metadata.duration_sec || 0,
+                    description: 'Full flight duration (no segments detected).',
+                  },
+                ]
               )
                 .map((segment, segIndex) => {
                   // Find all transcript segments that fall within this flight segment

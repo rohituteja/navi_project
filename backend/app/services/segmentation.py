@@ -199,13 +199,18 @@ def generate_candidates(telemetry: dict, profile: dict = None) -> List[Dict[str,
             pitch_abs = abs(p.get("pitch", 0))
             v_spd = p.get("v_spd", 0)
             
+            # Get climb threshold from profile, default to 300 fpm
+            climb_vspd_threshold = 300
+            if profile and "maneuver_thresholds" in profile:
+                climb_vspd_threshold = profile["maneuver_thresholds"].get("climb_vspd_min", 300)
+
             if roll_abs > steep_turn_roll_min:
                 label = "MANEUVER_HIGH_BANK"
             elif pitch_abs > 15:
                 label = "MANEUVER_HIGH_PITCH"
-            elif v_spd > 500:
+            elif v_spd > climb_vspd_threshold:
                 label = "CLIMB"
-            elif v_spd < -500:
+            elif v_spd < -climb_vspd_threshold:
                 label = "DESCENT"
             else:
                 label = "STABLE_FLIGHT"
@@ -351,7 +356,8 @@ def detect_engine_start(data: List[Dict], profile: dict = None) -> Optional[Dict
     idle_rpm = 800
     if profile and "rpm_profiles" in profile:
         idle_range = profile["rpm_profiles"].get("idle_taxi", [600, 1000])
-        idle_rpm = idle_range[0] if isinstance(idle_range, list) else 600
+        # Use upper bound of idle range as threshold for "engine running"
+        idle_rpm = idle_range[1] if isinstance(idle_range, list) else 1000
     
     for i, p in enumerate(data):
         current_rpm = p.get("rpm", 0)
@@ -378,9 +384,8 @@ def detect_takeoffs(data: List[Dict], profile: dict = None) -> List[Dict[str, An
         if "maneuver_thresholds" in profile:
             takeoff_ias = profile["maneuver_thresholds"].get("takeoff_ias_min", 40)
         if "rpm_profiles" in profile:
-            # Use cruise or full power RPM as takeoff threshold
-            cruise_range = profile["rpm_profiles"].get("cruise", [4500, 5200])
-            high_rpm = cruise_range[0] if isinstance(cruise_range, list) else 4000
+            # Use specific takeoff RPM min threshold from profile
+            high_rpm = profile["maneuver_thresholds"].get("rpm_takeoff_min", 2300)
     
     for i in range(10, len(data) - 10):
         current = data[i]
@@ -642,7 +647,7 @@ def detect_segments(
         prompt += f"\n\nKEY EVENTS DETECTED (Use these as anchors):\n{key_events_text}\n"
 
         response = client.chat.completions.create(
-            model="gpt-5-mini",
+            model="gpt-5-nano",
             messages=[
                 {
                     "role": "system",

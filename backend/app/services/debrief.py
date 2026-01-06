@@ -259,7 +259,7 @@ def generate_debrief(
     try:
         client = OpenAI(api_key=api_key)
         response = client.chat.completions.create(
-            model="gpt-5-mini",
+            model="gpt-5-nano",
             messages=[
                 {"role": "system", "content": "You are a helpful flight instructor, specializing in flight analysis and debriefing."},
                 {"role": "user", "content": prompt},
@@ -404,7 +404,7 @@ def generate_segment_debrief(
     try:
         client = OpenAI(api_key=api_key)
         response = client.chat.completions.create(
-            model="gpt-5-mini",
+            model="gpt-5-nano",
             messages=[
                 {"role": "system", "content": "You are a helpful flight instructor."},
                 {"role": "user", "content": prompt},

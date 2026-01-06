@@ -47,5 +47,54 @@
             "stall_rpm_max": 3000,
             "stall_speed_decay_max": 45
         }
+    },
+    "Cessna 172S (G1000)": {
+        "v_speeds": {
+            "v_s0": 40,
+            "v_s1": 48,
+            "v_x": 62,
+            "v_y": 74,
+            "v_app": 65,
+            "v_a": 105,
+            "v_no": 129
+        },
+        "rpm_profiles": {
+            "idle_taxi": [
+                800,
+                1200
+            ],
+            "run_up": [
+                1700,
+                1900
+            ],
+            "approach_descent": [
+                1500,
+                2200
+            ],
+            "slow_flight": [
+                1800,
+                2200
+            ],
+            "cruise": [
+                2100,
+                2700
+            ],
+            "max_continuous_climb": [
+                2400,
+                2700
+            ]
+        },
+        "maneuver_thresholds": {
+            "ground_speed_taxi_max": 30,
+            "ground_speed_runup_max": 5,
+            "rpm_runup_min": 1700,
+            "rpm_takeoff_min": 2300,
+            "climb_vspd_min": 300,
+            "steep_turn_roll_min": 40,
+            "slow_flight_speed_max": 65,
+            "slow_flight_rpm_min": 1800,
+            "stall_rpm_max": 1500,
+            "stall_speed_decay_max": 50
+        }
     }
 }
