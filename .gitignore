@@ -1,4 +1,4 @@
-navi-env/
+/venv
 pyvenv.cfg
 __pycache__/
 *.py[cod]
@@ -43,5 +43,5 @@ uploads/
 test_data/
 cached_transcript.json
 
-navi_project_demo_video.mp4
-/navi project pre-made example
+demo_video.mp4
+/pre-made example
