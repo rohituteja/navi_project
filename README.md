@@ -1,13 +1,13 @@
 # AI-Powered Flight Debrief Concept
 
-An audio-first flight debrief web application designed to help pilots analyze their approaches by combining flight telemetry with cockpit audio.
+An audio-first flight debrief web application designed to help pilots analyze their flight performance by combining rich telemetry data with cockpit audio.
 
 ## 🚀 Quick Start
 
 ### Prerequisites
 - **Python 3.11+**
 - **Node.js 18+**
-- **OpenAI API Key**
+- **OpenAI API Key** (configured for `gpt-5-nano`)
 
 ### 1. Environment Setup
 Create a `.env` file in the root directory:
@@ -40,65 +40,51 @@ npm run dev
 The application is built on a **decoupled client-server architecture**, designed to handle the specific challenges of synchronizing multi-modal data (audio + time-series telemetry).
 
 ### High-Level Data Flow
-1.  **Ingestion**: User uploads Flight Telemetry (CSV/Excel) and Cockpit Audio (MP3/WAV) and selects the **Aircraft Profile**.
-2.  **Normalization**: Backend standardizes data formats (standard telemetry schema).
+1.  **Ingestion**: User uploads Flight Telemetry (**Garmin G3X Excel** or **G1000 CSV**) and Cockpit Audio (MP3/WAV) and selects the **Aircraft Profile**.
+2.  **Normalization**: Backend standardizes data formats into a unified telemetry schema, handling differences between G3X and G1000 logs.
 3.  **Transcription**: OpenAI Whisper converts audio to text with timestamps.
-4.  **Robust Alignment**: The system synchronizes audio and telemetry using a multi-detector clustering algorithm.
+4.  **Robust Alignment**: The system synchronizes audio and telemetry using a **Multi-Detector Clustering** algorithm to find the optimal time offset.
 5.  **Sensor Fusion Analysis**: The core engine combines physical data with semantic audio data to segment the flight using a two-stage AI process, guided by aircraft-specific performance data.
-6.  **Visualization**: Frontend renders the aligned timeline, allowing pilots to "replay" the flight.
+6.  **Visualization**: Frontend renders the aligned timeline and per-segment debriefs, allowing pilots to "replay" and analyze their flight.
 
 ### 🧠 The "Sensor Fusion" Engine (Backend)
-The most complex part of the system is the **Flight Segmentation Logic** (`backend/app/services/segmentation.py`). We chose a **Hybrid AI + Heuristic approach** rather than relying on just one method.
+The application uses a **Hybrid AI + Heuristic approach** for flight segmentation (`backend/app/services/segmentation.py`).
 
 #### **Why this approach?**
--   **Pure Heuristics (Rule-based)** are good at detecting physical states (e.g., "High Engine RPMs", "Bank angle > 30°") but fail at understanding context (e.g., distinguishing a "Stop and Go" from a "Taxi back").
--   **Pure LLMs** are great at understanding context (e.g., Pilot says "Turning base") but struggle with precise timing and math.
+-   **Pure Heuristics** are excellent for detecting physical states (e.g., "Airspeed > 70kts", "RPM > 5000") but lack semantic context (e.g., distinguishing a "Touch and Go" from a "Full Stop").
+-   **Pure LLMs** excel at understanding context (e.g., Pilot says "Clearance delivery, Sling 123...") but struggle with precise mathematical boundaries in raw telemetry.
 
 #### **How it works:**
 1.  **Aircraft-Aware Heuristics**:
-    -   We first run a fast, physics-based pass over the telemetry using **Aircraft Profiles**.
-    -   Thresholds for stalls, steep turns, and run-ups are dynamically adjusted based on the selected plane (e.g., Sling NGT vs. Cessna 172).
-    -   *Result*: A list of "Regions of Interest" (ROI) with precise timestamps.
+    -   A fast, physics-based pass identifies "Regions of Interest" (ROI) based on **Aircraft Profiles** (e.g., Sling NGT vs. Cessna 172S).
+    -   Detects key physical events like engine start, rotation, and touchdown.
 2.  **Two-Stage LLM Analysis**:
-    -   **Stage 1 (Key Events)**: The LLM first identifies major anchor events (Engine Start, Takeoff, Landing, Shutdown) to establish a global timeline.
-    -   **Stage 2 (Refinement)**: We feed the **Heuristic Candidates**, **Telemetry Summary**, **Audio Transcript**, and **Key Events** into the LLM.
-    -   The LLM acts as a "Flight Instructor", using the semantic cues from the audio ("Clear of runway") to refine the physical boundaries found by the heuristics.
-    -   It enforces a **Strict State Machine** (e.g., `TAXI` -> `RUNUP` -> `TAKEOFF` -> `SUSTAINED CLIMB`) to ensure logical flow between segments.
+    -   **Stage 1 (Key Events)**: Identifies major anchor events (Takeoff, Landing) to establish a global timeline.
+    -   **Stage 2 (Refinement)**: Feeds the heuristic candidates, telemetry summaries, and audio transcripts into **GPT-5-nano**.
+    -   The LLM acts as a "Flight Instructor", using semantic cues ("Turning base") to refine the physical boundaries found by heuristics, enforcing a strict flight state machine.
 
 ### 🔗 Robust Audio-Telemetry Alignment (`alignment.py`)
-Synchronizing a separate audio recording with G3X flight logs is difficult due to clock drift and lack of common timestamps. We solved this with a **Multi-Pass Clustering Strategy**:
-
-1.  **Candidate Detection**: We run 9 specialized detectors to find potential correlation points:
-    -   `Power/RPM Changes` (e.g., "Full power" callout vs RPM spike)
-    -   `Airspeed Callouts` (e.g., "Airspeed alive" vs Speed > 0)
-    -   `Run-up Checks` (Distinctive high-RPM, zero-speed signature)
-    -   `Takeoff Roll` & `Landings`
-    -   `Steep Turns` & `Stall Warnings`
-2.  **Clustering & Voting**: These candidates are clustered to find a consensus time offset. High-confidence events (like a distinct RPM spike during run-up) are weighted more heavily.
+Synchronizing separate cockpit audio with flight logs is difficult due to clock drift. We solved this with a **Multi-Pass Clustering Strategy**:
+1.  **Detector Suite**: 9 specialized detectors look for correlation points (e.g., "Power/RPM Changes", "Airspeed Callouts", "Stall Warnings").
+2.  **Clustering & Voting**: Candidates are clustered to find a consensus time offset. High-confidence events (like a distinct RPM spike during run-up) are weighted more heavily.
 
 ### 📊 Telemetry & Profiles
--   **Normalization**: We use `pandas` to create a unified internal schema from Garmin G3X Excel files.
--   **Aircraft Profiles**: The system loads `aircraft_profiles.json` to adapt its analysis logic. This allows it to correctly identify maneuvers based on the specific performance envelope of the plane being flown.
-
-### ⚡ Asynchronous Job Pattern
-Analyzing an hour-long flight takes time.
--   **Decision**: We avoid blocking HTTP requests.
--   **Flow**: `POST /upload` returns a `job_id` immediately. The frontend polls `GET /status/{job_id}`.
--   **Why**: Keeps the UI responsive and allows for progress updates (e.g., "Transcribing...", "Analyzing...").
+-   **Multi-Platform Support**: Native support for **Garmin G3X** and **Garmin G1000** data formats.
+-   **Aircraft Profiles**: Customizable performance envelopes via `aircraft_profiles.json` (includes Sling NGT, Cessna 172S G1000, etc.).
 
 ---
 
 ## 🛠 Technology Stack
 
 ### Backend (Python + FastAPI)
--   **FastAPI**: Chosen for native async support (crucial for long-running AI tasks) and auto-generated OpenAPI docs.
--   **Pandas**: The industry standard for time-series data manipulation.
--   **OpenAI GPT-5-nano / GPT-5-mini**: Used for high-speed, cost-effective semantic analysis. GPT-5-nano handles lightweight event validation; GPT-5-mini handles full segmentation and debrief generation.
+-   **FastAPI**: For high-performance async API endpoints.
+-   **Pandas**: For robust time-series telemetry manipulation and normalization.
+-   **OpenAI GPT-5-nano**: Powers the core segmentation logic, event validation, and debrief generation.
 
 ### Frontend (React + Vite)
--   **React**: Component-based architecture suitable for complex dashboards.
--   **Vite**: Extremely fast build tool.
--   **Vanilla CSS**: We intentionally avoided heavy UI frameworks to maintain full control over the "Dark Mode" aviation aesthetic.
+-   **React**: Component-based architecture for the flight dashboard.
+-   **Vite**: Ultra-fast development and build tool.
+-   **Vanilla CSS**: Custom "Aviation Dark Mode" aesthetic with smooth transitions and responsive layout.
 
 ## 📂 Project Structure
 
@@ -106,12 +92,14 @@ Analyzing an hour-long flight takes time.
 navi_project/
 ├── backend/
 │   ├── app/
-│   │   ├── api/            # API Endpoints
-│   │   └── services/       # Core Logic (Segmentation, Alignment, Profiles)
-│   ├── main.py             # App Entry Point
+│   │   ├── api/            # FastAPI routes
+│   │   ├── services/       # Core Logic (Segmentation, Alignment, Telemetry, Debrief)
+│   │   └── config/         # Aircraft Profiles and settings
+│   ├── main.py             # Entry point
 │   └── requirements.txt
 ├── frontend/
-│   ├── src/                # React Components
+│   ├── src/                # React components and logic
 │   └── package.json
 └── README.md
 ```
+
