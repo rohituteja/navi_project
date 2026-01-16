@@ -89,7 +89,7 @@ Synchronizing separate cockpit audio with flight logs is difficult due to clock 
 ## 📂 Project Structure
 
 ```
-navi_project/
+ai_flight_debrief_project/
 ├── backend/
 │   ├── app/
 │   │   ├── api/            # FastAPI routes
